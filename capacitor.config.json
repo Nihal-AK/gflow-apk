@@ -1,0 +1,12 @@
+{
+  "appId": "com.technotopia.gflow",
+  "appName": "G·FLOW Pro",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
