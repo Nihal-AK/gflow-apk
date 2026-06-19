@@ -6,9 +6,9 @@
     "build": "echo No build step needed"
   },
   "dependencies": {
-    "@capacitor/android": "^5.0.0",
-    "@capacitor/cli": "^5.0.0",
-    "@capacitor/core": "^5.0.0",
+    "@capacitor/android": "4.8.1",
+    "@capacitor/cli": "4.8.1",
+    "@capacitor/core": "4.8.1",
     "cordova-plugin-serialusb": "^1.0.0"
   }
 }
