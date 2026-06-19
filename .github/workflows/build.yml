@@ -24,6 +24,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install dependencies
         run: npm install
 
@@ -35,6 +38,61 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Fix variables.gradle for Capacitor 4
+        run: |
+          cat > android/variables.gradle << 'EOF'
+          ext {
+              minSdkVersion = 22
+              compileSdkVersion = 32
+              targetSdkVersion = 32
+              androidxActivityVersion = '1.4.0'
+              androidxAppCompatVersion = '1.4.2'
+              androidxCoordinatorLayoutVersion = '1.2.0'
+              androidxCoreVersion = '1.8.0'
+              androidxFragmentVersion = '1.4.1'
+              junitVersion = '4.13.2'
+              androidxJunitVersion = '1.1.3'
+              androidxEspressoCoreVersion = '3.4.0'
+              cordovaAndroidVersion = '10.1.1'
+          }
+          EOF
+
+      - name: Create USB device filter XML
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <usb-device vendor-id="6790" product-id="29987" />
+            <usb-device vendor-id="1027" product-id="24577" />
+            <usb-device vendor-id="9025" product-id="16"    />
+            <usb-device vendor-id="4292" product-id="60000" />
+          </resources>
+          EOF
+
+      - name: Patch AndroidManifest.xml
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-feature android:name="android.hardware.usb.host" />\n    <uses-permission android:name="android.permission.USB_PERMISSION" />|' $MANIFEST
+          sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data\n                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"\n                android:resource="@xml/usb_device_filter" />\n        </activity>|' $MANIFEST
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon 2>&1
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GFlowPro-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
       - name: Fix SDK versions
         run: |
           cat > android/variables.gradle << 'EOF'
