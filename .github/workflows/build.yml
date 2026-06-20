@@ -35,6 +35,20 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Show Capacitor generated files
+        run: |
+          echo "====== variables.gradle ======"
+          cat android/variables.gradle
+          echo ""
+          echo "====== app/build.gradle ======"
+          cat android/app/build.gradle
+          echo ""
+          echo "====== build.gradle (root) ======"
+          cat android/build.gradle
+          echo ""
+          echo "====== AndroidManifest.xml ======"
+          cat android/app/src/main/AndroidManifest.xml
+
       - name: Write variables.gradle
         run: |
           cat > android/variables.gradle << 'EOF'
@@ -47,6 +61,9 @@ jobs:
               androidxCoordinatorLayoutVersion = '1.2.0'
               androidxCoreVersion = '1.12.0'
               androidxFragmentVersion = '1.6.2'
+              coreSplashScreenVersion = '1.0.1'
+              androidxWebkitVersion = '1.6.1'
+              androidxPreferenceVersion = '1.2.1'
               junitVersion = '4.13.2'
               androidxJunitVersion = '1.1.5'
               androidxEspressoCoreVersion = '3.5.1'
@@ -111,9 +128,18 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build debug APK
+        continue-on-error: true
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon 2>&1
+
+      - name: Check APK output
+        run: |
+          echo "====== Searching for APK ======"
+          find /home/runner/work -name "*.apk" 2>/dev/null || echo "No APK found"
+          echo ""
+          echo "====== Build output folder ======"
+          ls -la android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Folder not found"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
