@@ -76,8 +76,8 @@ jobs:
       - name: Patch AndroidManifest.xml
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-feature android:name="android.hardware.usb.host" />\n    <uses-permission android:name="android.permission.USB_PERMISSION" />|' $MANIFEST
-          sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data\n                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"\n                android:resource="@xml/usb_device_filter" />\n        </activity>|' $MANIFEST
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-feature android:name="android.hardware.usb.host" />\n    <uses-permission android:name="android.permission.USB_PERMISSION" />|' "$MANIFEST"
+          sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_device_filter" />\n        </activity>|' "$MANIFEST"
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -98,7 +98,7 @@ jobs:
       - name: Build debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew clean assembleDebug --no-daemon --stacktrace
 
       - name: Check APK exists
         run: |
@@ -113,3 +113,4 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+          
