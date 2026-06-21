@@ -107,32 +107,17 @@ jobs:
           </manifest>
           EOF
 
-      - name: Repair broken USB Plugin
-        run: |
-          # Find the plugin directory inside node_modules
-          PLUGIN_DIR=$(find node_modules -name "UsbSerial.java" | sed -r 's|/src/android/UsbSerial.java||g')
-          if [ -n "$PLUGIN_DIR" ]; then
-            echo "Found broken plugin at $PLUGIN_DIR. Repairing..."
-            
-            # 1. Fix the Java file compilation errors
-            sed -i 's/Serial\.class/UsbSerial.class/g' "$PLUGIN_DIR/src/android/UsbSerial.java"
-            sed -i 's/Serial\.this/UsbSerial.this/g' "$PLUGIN_DIR/src/android/UsbSerial.java"
-            
-            # 2. Fix the JavaScript file so it calls the right Native class
-            find "$PLUGIN_DIR/www" -name "*.js" -exec sed -i 's/"Serial"/"UsbSerial"/g' {} +
-            find "$PLUGIN_DIR/www" -name "*.js" -exec sed -i "s/'Serial'/'UsbSerial'/g" {} +
-            
-            # 3. Fix the plugin.xml mapping
-            sed -i 's/name="Serial"/name="UsbSerial"/g' "$PLUGIN_DIR/plugin.xml"
-            sed -i 's/\.Serial"/.UsbSerial"/g' "$PLUGIN_DIR/plugin.xml"
-            
-            echo "Plugin repaired successfully!"
-          else
-            echo "Plugin not found."
-          fi
-
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Fix broken USB plugin typos (Safe Version)
+        run: |
+          FILE="android/capacitor-cordova-android-plugins/src/main/java/com/dchs/usbserial/UsbSerial.java"
+          if [ -f "$FILE" ]; then
+            sed -i 's/Serial\.class/UsbSerial.class/g' "$FILE"
+            sed -i 's/Serial\.this/UsbSerial.this/g' "$FILE"
+            echo "Fixed typos in UsbSerial.java!"
+          fi
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
