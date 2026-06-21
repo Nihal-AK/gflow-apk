@@ -39,58 +39,116 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Verify Android project structure
+        run: |
+          echo "=== Checking Android project structure ==="
+          if [ ! -f android/app/build.gradle ]; then
+            echo "ERROR: android/app/build.gradle not found!"
+            ls -la android/ || echo "android directory not found"
+            exit 1
+          fi
+          echo "✓ Android project structure verified"
+
       - name: Fix variables.gradle
         run: |
           cat > android/variables.gradle << 'EOF'
-          ext {
-              minSdkVersion = 22
-              compileSdkVersion = 34
-              targetSdkVersion = 34
-              androidxActivityVersion = '1.8.0'
-              androidxAppCompatVersion = '1.6.1'
-              androidxCoordinatorLayoutVersion = '1.2.0'
-              androidxCoreVersion = '1.12.0'
-              androidxFragmentVersion = '1.6.2'
-              junitVersion = '4.13.2'
-              androidxJunitVersion = '1.1.5'
-              androidxEspressoCoreVersion = '3.5.1'
-              cordovaAndroidVersion = '10.1.1'
-              coreSplashScreenVersion = '1.0.1'
-          }
-          EOF
-          echo "android.suppressUnsupportedCompileSdk=34" >> android/gradle.properties
+ext {
+    minSdkVersion = 22
+    compileSdkVersion = 34
+    targetSdkVersion = 34
+    androidxActivityVersion = '1.8.0'
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.12.0'
+    androidxFragmentVersion = '1.6.2'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.1.5'
+    androidxEspressoCoreVersion = '3.5.1'
+    cordovaAndroidVersion = '10.1.1'
+    coreSplashScreenVersion = '1.0.1'
+}
+EOF
+          cat > android/gradle.properties << 'EOF'
+org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m
+android.useAndroidX=true
+android.enableJetifier=true
+android.suppressUnsupportedCompileSdk=34
+EOF
+          echo "✓ variables.gradle and gradle.properties configured"
 
       - name: Create USB device filter XML
         run: |
           mkdir -p android/app/src/main/res/xml
           cat > android/app/src/main/res/xml/usb_device_filter.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-            <usb-device vendor-id="6790" product-id="29987" />
-            <usb-device vendor-id="1027" product-id="24577" />
-            <usb-device vendor-id="9025" product-id="16"    />
-            <usb-device vendor-id="4292" product-id="60000" />
-          </resources>
-          EOF
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <usb-device vendor-id="6790" product-id="29987" />
+  <usb-device vendor-id="1027" product-id="24577" />
+  <usb-device vendor-id="9025" product-id="16" />
+  <usb-device vendor-id="4292" product-id="60000" />
+</resources>
+EOF
+          echo "✓ USB device filter created"
 
       - name: Patch AndroidManifest.xml
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-feature android:name="android.hardware.usb.host" />\n    <uses-permission android:name="android.permission.USB_PERMISSION" />|' "$MANIFEST"
-          sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_device_filter" />\n        </activity>|' "$MANIFEST"
+          
+          if [ -f "$MANIFEST" ]; then
+            # Add USB permissions
+            sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.USB" />\n    <uses-feature android:name="android.hardware.usb.host" />|g' "$MANIFEST"
+            
+            # Add USB intent filter
+            if ! grep -q "android.hardware.usb.action.USB_DEVICE_ATTACHED" "$MANIFEST"; then
+              sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_device_filter" />\n        </activity>|' "$MANIFEST"
+            fi
+            echo "✓ AndroidManifest.xml patched"
+          else
+            echo "WARNING: AndroidManifest.xml not found at $MANIFEST"
+          fi
 
       - name: Sync Capacitor
         run: npx cap sync android
 
       - name: Fix usbserial bridge in compiled assets
         run: |
-          sed -i "s/\bserial\./usbserial./g" android/app/src/main/assets/public/index.html
-          sed -i "s/'UsbSerial'/'usbserial'/g; s/'Serial'/'usbserial'/g" android/app/src/main/assets/public/plugins/cordova-plugin-usbserial/www/usbserial.js
+          if [ -f android/app/src/main/assets/public/index.html ]; then
+            sed -i "s/\bserial\./usbserial./g" android/app/src/main/assets/public/index.html
+          fi
+          
+          if [ -f android/app/src/main/assets/public/plugins/cordova-plugin-usbserial/www/usbserial.js ]; then
+            sed -i "s/'UsbSerial'/'usbserial'/g; s/'Serial'/'usbserial'/g" android/app/src/main/assets/public/plugins/cordova-plugin-usbserial/www/usbserial.js
+          fi
+          echo "✓ USB serial bridge fixed"
 
       - name: Force SDK version in app build.gradle
         run: |
-          sed -i 's/^\(\s*\)compileSdkVersion [0-9]*/\1compileSdkVersion 34/' android/app/build.gradle
-          sed -i 's/^\(\s*\)targetSdkVersion [0-9]*/\1targetSdkVersion 34/' android/app/build.gradle
+          GRADLE_FILE=android/app/build.gradle
+          
+          if [ -f "$GRADLE_FILE" ]; then
+            # Update compileSdkVersion
+            if grep -q "compileSdkVersion" "$GRADLE_FILE"; then
+              sed -i 's/compileSdkVersion\s*[0-9]*/compileSdkVersion 34/' "$GRADLE_FILE"
+            else
+              sed -i '/android {/a\    compileSdkVersion 34' "$GRADLE_FILE"
+            fi
+            
+            # Update targetSdkVersion
+            if grep -q "targetSdkVersion" "$GRADLE_FILE"; then
+              sed -i 's/targetSdkVersion\s*[0-9]*/targetSdkVersion 34/' "$GRADLE_FILE"
+            fi
+            
+            # Update minSdkVersion
+            if grep -q "minSdkVersion" "$GRADLE_FILE"; then
+              sed -i 's/minSdkVersion\s*[0-9]*/minSdkVersion 22/' "$GRADLE_FILE"
+            fi
+            
+            echo "=== Updated SDK versions ==="
+            grep -E "(compileSdkVersion|targetSdkVersion|minSdkVersion)" "$GRADLE_FILE" | head -3
+          else
+            echo "ERROR: $GRADLE_FILE not found!"
+            exit 1
+          fi
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -98,13 +156,28 @@ jobs:
       - name: Build debug APK
         run: |
           cd android
-          ./gradlew clean assembleDebug --no-daemon --stacktrace
+          ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+          
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "=== BUILD FAILED - Last 100 lines of log ==="
+            tail -100 build.log
+            exit 1
+          fi
 
       - name: Check APK exists
         run: |
-          find . -name "*.apk" 2>/dev/null
-          ls -la app/build/outputs/apk/debug/ || echo "APK folder not found"
-        working-directory: android
+          cd android
+          echo "=== Searching for APK files ==="
+          find . -name "*.apk" -type f 2>/dev/null
+          
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            echo "✓ APK found successfully"
+            ls -lh app/build/outputs/apk/debug/app-debug.apk
+          else
+            echo "ERROR: APK not found at expected location"
+            ls -la app/build/outputs/ 2>/dev/null || echo "outputs directory not found"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -113,4 +186,3 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
-          
