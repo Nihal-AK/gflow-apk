@@ -110,6 +110,15 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Fix broken USB plugin typos
+        run: |
+          FILE="android/capacitor-cordova-android-plugins/src/main/java/com/dchs/usbserial/UsbSerial.java"
+          if [ -f "$FILE" ]; then
+            sed -i 's/Serial\.class/UsbSerial.class/g' "$FILE"
+            sed -i 's/Serial\.this/UsbSerial.this/g' "$FILE"
+            echo "Fixed typos in UsbSerial.java!"
+          fi
+
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
