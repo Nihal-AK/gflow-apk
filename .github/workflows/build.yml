@@ -1,14 +1,11 @@
 name: Build G·FLOW Pro APK
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,13 +13,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install dependencies
         run: npm install
@@ -32,12 +32,16 @@ jobs:
           mkdir -p www
           cp index-1.html www/index.html
 
+      - name: Fix serial global name mismatch
+        run: |
+          sed -i "s/\bserial\./usbserial./g" www/index.html
+
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Write variables.gradle
+      - name: Fix variables.gradle
         run: |
-          cat > android/variables.gradle << 'GRADLE'
+          cat > android/variables.gradle << 'EOF'
           ext {
               minSdkVersion = 22
               compileSdkVersion = 34
@@ -47,20 +51,19 @@ jobs:
               androidxCoordinatorLayoutVersion = '1.2.0'
               androidxCoreVersion = '1.12.0'
               androidxFragmentVersion = '1.6.2'
-              coreSplashScreenVersion = '1.0.1'
-              androidxWebkitVersion = '1.6.1'
-              androidxPreferenceVersion = '1.2.1'
               junitVersion = '4.13.2'
               androidxJunitVersion = '1.1.5'
               androidxEspressoCoreVersion = '3.5.1'
               cordovaAndroidVersion = '10.1.1'
+              coreSplashScreenVersion = '1.0.1'
           }
-          GRADLE
+          EOF
+          echo "android.suppressUnsupportedCompileSdk=34" >> android/gradle.properties
 
-      - name: Write USB device filter XML
+      - name: Create USB device filter XML
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'XML'
+          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
             <usb-device vendor-id="6790" product-id="29987" />
@@ -68,56 +71,26 @@ jobs:
             <usb-device vendor-id="9025" product-id="16"    />
             <usb-device vendor-id="4292" product-id="60000" />
           </resources>
-          XML
+          EOF
 
-      - name: Write AndroidManifest with USB permissions
+      - name: Patch AndroidManifest.xml
         run: |
-          cat > android/app/src/main/AndroidManifest.xml << 'XML'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-feature android:name="android.hardware.usb.host" />
-              <uses-permission android:name="android.permission.USB_PERMISSION" />
-              <application
-                  android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="@string/app_name"
-                  android:roundIcon="@mipmap/ic_launcher_round"
-                  android:supportsRtl="true"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-                      android:name=".MainActivity"
-                      android:label="@string/title_activity_main"
-                      android:theme="@style/AppTheme.NoActionBarLaunch"
-                      android:launchMode="singleTask"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-                      </intent-filter>
-                      <meta-data
-                          android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                          android:resource="@xml/usb_device_filter" />
-                  </activity>
-              </application>
-          </manifest>
-          XML
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-feature android:name="android.hardware.usb.host" />\n    <uses-permission android:name="android.permission.USB_PERMISSION" />|' $MANIFEST
+          sed -i 's|</activity>|    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />\n            </intent-filter>\n            <meta-data\n                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"\n                android:resource="@xml/usb_device_filter" />\n        </activity>|' $MANIFEST
 
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Fix broken USB plugin typos
+      - name: Fix usbserial bridge in compiled assets
         run: |
-          FILE="android/capacitor-cordova-android-plugins/src/main/java/com/dchs/usbserial/UsbSerial.java"
-          if [ -f "$FILE" ]; then
-            sed -i 's/Serial\.class/UsbSerial.class/g' "$FILE"
-            sed -i 's/Serial\.this/UsbSerial.this/g' "$FILE"
-            echo "Fixed typos in UsbSerial.java!"
-          fi
+          sed -i "s/\bserial\./usbserial./g" android/app/src/main/assets/public/index.html
+          sed -i "s/'UsbSerial'/'usbserial'/g; s/'Serial'/'usbserial'/g" android/app/src/main/assets/public/plugins/cordova-plugin-usbserial/www/usbserial.js
+
+      - name: Force SDK version in app build.gradle
+        run: |
+          sed -i 's/^\(\s*\)compileSdkVersion [0-9]*/\1compileSdkVersion 34/' android/app/build.gradle
+          sed -i 's/^\(\s*\)targetSdkVersion [0-9]*/\1targetSdkVersion 34/' android/app/build.gradle
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -127,9 +100,16 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon
 
+      - name: Check APK exists
+        run: |
+          find . -name "*.apk" 2>/dev/null
+          ls -la app/build/outputs/apk/debug/ || echo "APK folder not found"
+        working-directory: android
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GFlowPro-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 30
