@@ -27,6 +27,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify npm plugin installation
+        run: |
+          if ! npm ls | grep -iE "usb-serial|usbserial"; then
+            echo "::error::The USB plugin is completely missing from the npm installation."
+            exit 1
+          else
+            echo "NPM successfully installed the plugin!"
+          fi
+
       - name: Create www folder and copy index.html
         run: |
           mkdir -p www
@@ -35,9 +44,28 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Verify plugin registration
+        run: |
+          echo "=== Contents of capacitor.plugins.json ==="
+          find android -name "capacitor.plugins.json" -exec cat {} \;
+          echo ""
+          echo "=== Contents of cordova_plugins.js ==="
+          find android -name "cordova_plugins.js" -exec cat {} \;
+          echo ""
+          echo "=== Grepping for usbserial ==="
+          if ! grep -qR -iE "usb.serial|usbserial" android; then
+            echo "::error::USB Serial plugin not found after cap sync! Capacitor rejected the plugin."
+            exit 1
+          else
+            echo "Plugin successfully found in Android directory!"
+          fi
+
       - name: Write variables.gradle
         run: |
-          cat > android/variables.gradle << 'EOF'
+          cat > android/variables.gradle << 'GRADLE'
           ext {
               minSdkVersion = 22
               compileSdkVersion = 34
@@ -55,12 +83,12 @@ jobs:
               androidxEspressoCoreVersion = '3.5.1'
               cordovaAndroidVersion = '10.1.1'
           }
-          EOF
+          GRADLE
 
       - name: Write USB device filter XML
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'EOF'
+          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
             <usb-device vendor-id="6790" product-id="29987" />
@@ -68,62 +96,46 @@ jobs:
             <usb-device vendor-id="9025" product-id="16"    />
             <usb-device vendor-id="4292" product-id="60000" />
           </resources>
-          EOF
+          XML
 
-      - name: Write AndroidManifest with USB permissions
+      - name: Safely inject Manifest permissions
         run: |
-          cat > android/app/src/main/AndroidManifest.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-feature android:name="android.hardware.usb.host" />
-              <uses-permission android:name="android.permission.USB_PERMISSION" />
-              <application
-                  android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="@string/app_name"
-                  android:roundIcon="@mipmap/ic_launcher_round"
-                  android:supportsRtl="true"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-                      android:name=".MainActivity"
-                      android:label="@string/title_activity_main"
-                      android:theme="@style/AppTheme.NoActionBarLaunch"
-                      android:launchMode="singleTask"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                      <intent-filter>
-                          <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-                      </intent-filter>
-                      <meta-data
-                          android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                          android:resource="@xml/usb_device_filter" />
-                  </activity>
-              </application>
-          </manifest>
-          EOF
+          cat > inject-manifest.js << 'JSEOF'
+          const fs = require('fs');
+          const file = 'android/app/src/main/AndroidManifest.xml';
+          let content = fs.readFileSync(file, 'utf8');
+          const featureToInject = '    <uses-feature android:name="android.hardware.usb.host" required="true" />';
+          const intentToInject = `
+                  <intent-filter>
+                      <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                  </intent-filter>
+                  <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_device_filter" />`;
+          if (!content.includes('android.hardware.usb.host')) {
+              content = content.replace('<application', featureToInject + '\n    <application');
+          }
+          if (!content.includes('USB_DEVICE_ATTACHED')) {
+              content = content.replace('</intent-filter>', '</intent-filter>\n' + intentToInject);
+          }
+          fs.writeFileSync(file, content);
+          console.log('Manifest injected successfully.');
+          JSEOF
+          node inject-manifest.js
 
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Fix broken USB plugin typos (Safe Version)
+      - name: Fix UsbSerial Java typo if present
         run: |
-          FILE="android/capacitor-cordova-android-plugins/src/main/java/com/dchs/usbserial/UsbSerial.java"
-          if [ -f "$FILE" ]; then
+          FILE=$(find android -name "UsbSerial.java" 2>/dev/null | head -1)
+          if [ -n "$FILE" ]; then
             sed -i 's/Serial\.class/UsbSerial.class/g' "$FILE"
             sed -i 's/Serial\.this/UsbSerial.this/g' "$FILE"
-            echo "Fixed typos in UsbSerial.java!"
+            echo "Checked and fixed typos in: $FILE"
+          else
+            echo "UsbSerial.java not found - plugin may use different class name, continuing..."
           fi
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
       - name: Build debug APK
-        continue-on-error: true
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon 2>&1
@@ -134,4 +146,3 @@ jobs:
           name: GFlowPro-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-          
