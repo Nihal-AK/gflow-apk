@@ -7,142 +7,172 @@ on:
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: 'npm'
 
-      - name: Set up Java 17
+      - name: ☕ Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
+          cache: 'gradle'
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: npm install
 
-      - name: Verify npm plugin installation
-        run: |
-          if ! npm ls | grep -iE "usb-serial|usbserial"; then
-            echo "::error::The USB plugin is completely missing from the npm installation."
-            exit 1
-          else
-            echo "NPM successfully installed the plugin!"
-          fi
-
-      - name: Create www folder and copy index.html
+      - name: 🌐 Prepare web assets
         run: |
           mkdir -p www
-          cp index-1.html www/index.html
-
-      - name: Add Android platform
-        run: npx cap add android
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Verify plugin registration
-        run: |
-          echo "=== Contents of capacitor.plugins.json ==="
-          find android -name "capacitor.plugins.json" -exec cat {} \;
-          echo ""
-          echo "=== Contents of cordova_plugins.js ==="
-          find android -name "cordova_plugins.js" -exec cat {} \;
-          echo ""
-          echo "=== Grepping for usbserial ==="
-          if ! grep -qR -iE "usb.serial|usbserial" android; then
-            echo "::error::USB Serial plugin not found after cap sync! Capacitor rejected the plugin."
-            exit 1
+          if [ -f "index-1.html" ]; then
+            cp index-1.html www/index.html
           else
-            echo "Plugin successfully found in Android directory!"
+            echo "<h1>G-FLOW Pro UI Missing</h1>" > www/index.html
           fi
 
-      - name: Write variables.gradle
+      - name: 📱 Add and Sync Capacitor Android
         run: |
-          cat > android/variables.gradle << 'GRADLE'
-          ext {
-              minSdkVersion = 22
-              compileSdkVersion = 34
-              targetSdkVersion = 34
-              androidxActivityVersion = '1.8.0'
-              androidxAppCompatVersion = '1.6.1'
-              androidxCoordinatorLayoutVersion = '1.2.0'
-              androidxCoreVersion = '1.12.0'
-              androidxFragmentVersion = '1.6.2'
-              coreSplashScreenVersion = '1.0.1'
-              androidxWebkitVersion = '1.6.1'
-              androidxPreferenceVersion = '1.2.1'
-              junitVersion = '4.13.2'
-              androidxJunitVersion = '1.1.5'
-              androidxEspressoCoreVersion = '3.5.1'
-              cordovaAndroidVersion = '10.1.1'
-          }
-          GRADLE
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
 
-      - name: Write USB device filter XML
+      - name: 🔍 Verify Plugin Synchronization
+        run: |
+          CONFIG_FILE="android/app/src/main/assets/capacitor.plugins.json"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ ERROR: capacitor.plugins.json not found! Sync failed."
+            exit 1
+          fi
+          
+          # Check for 'usb' or 'serial' in the synced plugins JSON
+          if grep -i -E "usb|serial" "$CONFIG_FILE" > /dev/null; then
+            echo "✅ USB Serial plugin verified in synced assets."
+          else
+            echo "❌ ERROR: USB Serial plugin is missing from the synced configuration!"
+            echo "--- Contents of capacitor.plugins.json ---"
+            cat "$CONFIG_FILE"
+            exit 1
+          fi
+
+      - name: 🌐 Inject JitPack Repository
+        run: |
+          cat > add-jitpack.js << 'EOF'
+          const fs = require('fs');
+          const buildGradle = 'android/build.gradle';
+          const settingsGradle = 'android/settings.gradle';
+
+          // 1. Try modern dependencyResolutionManagement (Capacitor 6+ / newer Android)
+          if (fs.existsSync(settingsGradle)) {
+            let settings = fs.readFileSync(settingsGradle, 'utf8');
+            if (settings.includes('dependencyResolutionManagement') && !settings.includes('jitpack.io')) {
+              settings = settings.replace(
+                /(repositories\s*\{)/, 
+                "$1\n        maven { url 'https://jitpack.io' }"
+              );
+              fs.writeFileSync(settingsGradle, settings);
+              console.log("✅ JitPack injected into settings.gradle");
+            }
+          }
+
+          // 2. Try legacy allprojects block (Capacitor 5 and below)
+          if (fs.existsSync(buildGradle)) {
+            let build = fs.readFileSync(buildGradle, 'utf8');
+            if (build.includes('allprojects') && !build.includes('jitpack.io')) {
+              build = build.replace(
+                /(allprojects\s*\{\s*repositories\s*\{)/, 
+                "$1\n        maven { url 'https://jitpack.io' }"
+              );
+              fs.writeFileSync(buildGradle, build);
+              console.log("✅ JitPack injected into build.gradle");
+            }
+          }
+          EOF
+          node add-jitpack.js
+
+      - name: 🔌 Create USB device filter
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'XML'
+          cat > android/app/src/main/res/xml/usb_device_filter.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-            <usb-device vendor-id="6790" product-id="29987" />
-            <usb-device vendor-id="1027" product-id="24577" />
-            <usb-device vendor-id="9025" product-id="16"    />
-            <usb-device vendor-id="4292" product-id="60000" />
+              <usb-device vendor-id="6790" product-id="29987"/>
+              <usb-device vendor-id="1027" product-id="24577"/>
+              <usb-device vendor-id="9025" product-id="16"/>
+              <usb-device vendor-id="4292" product-id="60000"/>
           </resources>
-          XML
+          EOF
 
-      - name: Safely inject Manifest permissions
+      - name: 💉 Safe Inject USB host support into Manifest
         run: |
-          cat > inject-manifest.js << 'JSEOF'
+          cat > inject.js << 'EOF'
           const fs = require('fs');
-          const file = 'android/app/src/main/AndroidManifest.xml';
-          let content = fs.readFileSync(file, 'utf8');
-          const featureToInject = '    <uses-feature android:name="android.hardware.usb.host" required="true" />';
-          const intentToInject = `
-                  <intent-filter>
-                      <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-                  </intent-filter>
-                  <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/usb_device_filter" />`;
-          if (!content.includes('android.hardware.usb.host')) {
-              content = content.replace('<application', featureToInject + '\n    <application');
+          const path = 'android/app/src/main/AndroidManifest.xml';
+          
+          if (!fs.existsSync(path)) {
+            console.error("AndroidManifest.xml not found!");
+            process.exit(1);
           }
-          if (!content.includes('USB_DEVICE_ATTACHED')) {
-              content = content.replace('</intent-filter>', '</intent-filter>\n' + intentToInject);
+
+          let xml = fs.readFileSync(path, 'utf8');
+
+          // 1. Inject USB Host Feature
+          if (!xml.includes('android.hardware.usb.host')) {
+            xml = xml.replace(
+              /<application/g,
+              '<uses-feature android:name="android.hardware.usb.host" android:required="true" />\n\n    <application'
+            );
           }
-          fs.writeFileSync(file, content);
-          console.log('Manifest injected successfully.');
-          JSEOF
-          node inject-manifest.js
 
-      - name: Fix UsbSerial Java typo if present
-        run: |
-          FILE=$(find android -name "UsbSerial.java" 2>/dev/null | head -1)
-          if [ -n "$FILE" ]; then
-            sed -i 's/Serial\.class/UsbSerial.class/g' "$FILE"
-            sed -i 's/Serial\.this/UsbSerial.this/g' "$FILE"
-            echo "Checked and fixed typos in: $FILE"
-          else
-            echo "UsbSerial.java not found - plugin may use different class name, continuing..."
-          fi
+          // 2. Safe Intent Filter Injection specifically targeted at MainActivity
+          if (!xml.includes('USB_DEVICE_ATTACHED')) {
+            const injection = `
+                <intent-filter>
+                    <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
+                </intent-filter>
+                <meta-data
+                    android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                    android:resource="@xml/usb_device_filter"/>`;
+            
+            // Regex strictly matches the opening <activity> tag containing "MainActivity" 
+            // all the way down to its specific closing </activity> tag.
+            const mainActivityRegex = /(<activity[^>]*android:name="[^"]*MainActivity"[^>]*>[\s\S]*?)(<\/activity>)/;
+            
+            if (mainActivityRegex.test(xml)) {
+              // $1 represents everything inside the activity tag, $2 is the closing tag
+              xml = xml.replace(mainActivityRegex, `$1${injection}\n        $2`);
+              console.log("✅ Manifest successfully updated with USB intents into MainActivity.");
+            } else {
+              console.error("❌ ERROR: MainActivity not found in Manifest! Could not safely inject.");
+              process.exit(1);
+            }
+          }
 
-      - name: Make Gradle executable
+          fs.writeFileSync(path, xml);
+          EOF
+          node inject.js
+
+      - name: 🛠️ Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
+      - name: 🚀 Build APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon 2>&1
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Upload APK
+      - name: 📤 Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GFlowPro-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          if-no-files-found: error
+          
