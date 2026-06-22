@@ -1,0 +1,2952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>G·FLOW Pro v4 — Advanced Arduino G-code Streamer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700&display=swap');
+
+:root{
+  --bg:#050a0e;--bg2:#07111a;--panel:#0d1825;--panel2:#111f2e;
+  --border:#1a3048;--border2:#244060;
+  --cyan:#00e5ff;--orange:#ff6b35;--green:#39ff14;
+  --yellow:#ffd600;--red:#ff2d55;--purple:#b57bee;--teal:#00bfa5;
+  --text:#c5d8e8;--muted:#456078;--muted2:#1e3350;
+  --r:10px;
+  --gc:0 0 22px rgba(0,229,255,.22);
+  --go:0 0 22px rgba(255,107,53,.22);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:linear-gradient(rgba(0,229,255,.016) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.016) 1px,transparent 1px);
+  background-size:42px 42px}
+.app{position:relative;z-index:1;max-width:1260px;margin:0 auto;padding:16px 16px 50px}
+
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:1.5rem;color:var(--cyan);text-shadow:var(--gc);letter-spacing:.06em;display:flex;align-items:baseline;user-select:none}
+.logo .sep{color:var(--orange);text-shadow:var(--go)}
+.logo .ver{font-size:.34em;letter-spacing:.2em;color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:500;margin-left:9px}
+.hdr-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* ── STATUS PILL ── */
+.pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:5px 13px;font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:.1em;color:var(--muted);transition:all .3s;user-select:none}
+.pill.conn{color:var(--green);border-color:rgba(57,255,20,.4)}
+.pill.streaming{color:var(--cyan);border-color:rgba(0,229,255,.4);box-shadow:var(--gc)}
+.pill.paused{color:var(--yellow);border-color:rgba(255,214,0,.4)}
+.sdot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+.sdot.pulse{animation:dp 1.1s ease-in-out infinite}
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+
+/* ── MACHINE BAR ── */
+.mbar{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:9px 14px;margin-bottom:10px;display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-family:'JetBrains Mono',monospace;position:relative;overflow:hidden}
+.mbar::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.35}
+.ms{display:flex;align-items:center;gap:5px}
+.msp{width:1px;height:20px;background:var(--border2);margin:0 5px;flex-shrink:0}
+.ml{font-size:.57rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mv{font-size:.8rem;color:var(--text)}
+.mvc{display:flex;align-items:center;gap:6px}
+.mcc .ax{color:var(--muted);font-size:.63rem}
+.mcc .vl{color:var(--cyan);font-size:.76rem}
+.ovr-disp{font-size:.72rem;color:var(--yellow);font-family:'JetBrains Mono',monospace}
+
+/* ── CONNECTION BAR ── */
+.cbar{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:10px 15px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.port-inf{font-family:'JetBrains Mono',monospace;font-size:.66rem;color:var(--muted);flex:1;min-width:150px}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0;flex-wrap:wrap}
+.tab{background:transparent;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;padding:8px 16px;font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.08em;color:var(--muted);cursor:pointer;transition:all .2s;user-select:none;margin-bottom:-1px}
+.tab:hover{color:var(--text);border-color:var(--border)}
+.tab.active{color:var(--cyan);background:var(--panel);border-color:var(--border);border-bottom-color:var(--panel)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ── PANELS ── */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;position:relative;transition:border-color .3s}
+.panel.active-p{border-color:rgba(0,229,255,.3)}
+.pt{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.55}
+.pt.o{background:linear-gradient(90deg,transparent,var(--orange),transparent)}
+.pt.g{background:linear-gradient(90deg,transparent,var(--green),transparent)}
+.pt.p{background:linear-gradient(90deg,transparent,var(--purple),transparent)}
+.phdr{display:flex;align-items:center;justify-content:space-between;padding:8px 13px;background:var(--bg2);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.63rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);flex-wrap:wrap;gap:7px}
+.pbody{padding:14px 16px}
+
+/* ── GRIDS ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:11px}
+@media(max-width:760px){.g2,.g3{grid-template-columns:1fr}}
+.g6{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin-bottom:11px}
+@media(max-width:760px){.g6{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:450px){.g6{grid-template-columns:repeat(2,1fr)}}
+
+/* ── STAT CARDS ── */
+.scard{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;text-align:center}
+.sn{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;color:var(--cyan);line-height:1;margin-bottom:4px}
+.sn.o{color:var(--orange)}.sn.g{color:var(--green)}.sn.y{color:var(--yellow)}.sn.r{color:var(--red)}.sn.p{color:var(--purple)}
+.sl{font-family:'JetBrains Mono',monospace;font-size:.57rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+/* ── PROGRESS ── */
+.ppanel{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:11px}
+.ptrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.pinf{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted)}
+.ppct{font-family:'Orbitron',monospace;font-weight:700;font-size:.95rem;color:var(--cyan)}
+.pbg{height:6px;background:var(--bg2);border-radius:999px;overflow:hidden}
+.pf{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),#0090ff);border-radius:999px;transition:width .22s ease;position:relative}
+.pf::after{content:'';position:absolute;right:0;top:0;bottom:0;width:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38));animation:sh 1.4s ease-in-out infinite}
+.pf.idle::after{display:none}
+@keyframes sh{0%,100%{opacity:0}50%{opacity:1}}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;border:1px solid;font-family:'JetBrains Mono',monospace;font-size:.74rem;letter-spacing:.03em;cursor:pointer;transition:background .14s,box-shadow .14s,transform .09s;white-space:nowrap;line-height:1;user-select:none;vertical-align:middle}
+.btn:disabled{opacity:.25;cursor:not-allowed!important;pointer-events:none}
+.btn:not(:disabled):active{transform:scale(.96)}
+.bcyan{background:rgba(0,229,255,.07);border-color:rgba(0,229,255,.45);color:var(--cyan)}
+.bcyan:not(:disabled):hover{background:rgba(0,229,255,.16);box-shadow:0 0 12px rgba(0,229,255,.2)}
+.bgreen{background:rgba(57,255,20,.07);border-color:rgba(57,255,20,.4);color:var(--green)}
+.bgreen:not(:disabled):hover{background:rgba(57,255,20,.16)}
+.byellow{background:rgba(255,214,0,.07);border-color:rgba(255,214,0,.4);color:var(--yellow)}
+.byellow:not(:disabled):hover{background:rgba(255,214,0,.16)}
+.bred{background:rgba(255,45,85,.07);border-color:rgba(255,45,85,.4);color:var(--red)}
+.bred:not(:disabled):hover{background:rgba(255,45,85,.16)}
+.borange{background:rgba(255,107,53,.07);border-color:rgba(255,107,53,.4);color:var(--orange)}
+.borange:not(:disabled):hover{background:rgba(255,107,53,.16)}
+.bpurple{background:rgba(181,123,238,.07);border-color:rgba(181,123,238,.4);color:var(--purple)}
+.bpurple:not(:disabled):hover{background:rgba(181,123,238,.16)}
+.bghost{background:transparent;border-color:var(--border2);color:var(--muted)}
+.bghost:not(:disabled):hover{border-color:var(--muted);color:var(--text)}
+.bsm{padding:5px 10px;font-size:.68rem}
+.bxs{padding:3px 7px;font-size:.63rem}
+
+/* ── INPUTS ── */
+.inp,.isml{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:7px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s}
+.inp{padding:7px 11px;font-size:.78rem}.isml{padding:4px 8px;font-size:.73rem}
+.inp:focus,.isml:focus{border-color:var(--cyan)}
+select.inp,select.isml{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23456078'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;padding-right:26px}
+.inp:disabled,.isml:disabled{opacity:.35;cursor:not-allowed}
+.ck{display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+.ck input{accent-color:var(--cyan);cursor:pointer}
+.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.mb10{margin-bottom:10px}
+.msm{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted)}
+.ul{font-family:'JetBrains Mono',monospace;font-size:.67rem;color:var(--muted)}
+
+/* ── RANGE SLIDERS ── */
+.slider-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.slider-lbl{font-family:'JetBrains Mono',monospace;font-size:.67rem;color:var(--muted);min-width:60px}
+.slider-val{font-family:'Orbitron',monospace;font-size:.85rem;font-weight:700;color:var(--cyan);min-width:40px;text-align:right}
+input[type=range]{-webkit-appearance:none;flex:1;height:4px;border-radius:2px;background:var(--border2);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--cyan);cursor:pointer;box-shadow:0 0 8px rgba(0,229,255,.4)}
+input[type=range].orange::-webkit-slider-thumb{background:var(--orange);box-shadow:0 0 8px rgba(255,107,53,.4)}
+input[type=range].green::-webkit-slider-thumb{background:var(--green);box-shadow:0 0 8px rgba(57,255,20,.4)}
+
+/* ── JOG PAD ── */
+.jog-grid{display:grid;grid-template-columns:repeat(3,70px);grid-template-rows:repeat(3,70px);gap:6px;justify-content:center;margin-bottom:12px}
+.jog-btn{background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.35);border-radius:9px;color:var(--cyan);font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;user-select:none}
+.jog-btn:not(:disabled):hover{background:rgba(0,229,255,.18);box-shadow:0 0 12px rgba(0,229,255,.2)}
+.jog-btn:not(:disabled):active{transform:scale(.93)}
+.jog-btn:disabled{opacity:.25;cursor:not-allowed}
+.jog-btn.z{border-color:rgba(57,255,20,.35);color:var(--green);background:rgba(57,255,20,.07)}
+.jog-btn.z:not(:disabled):hover{background:rgba(57,255,20,.16)}
+.jog-btn.cancel{border-color:rgba(255,45,85,.35);color:var(--red);background:rgba(255,45,85,.07)}
+.jog-btn.home{border-color:rgba(181,123,238,.35);color:var(--purple);background:rgba(181,123,238,.07)}
+.jog-steps{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;justify-content:center}
+.step-btn{padding:5px 11px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.68rem;cursor:pointer;transition:all .15s}
+.step-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,229,255,.08)}
+.step-btn:hover{color:var(--text);border-color:var(--muted)}
+
+/* ── FILE PANEL ── */
+.dzone{border:1.5px dashed var(--border2);border-radius:9px;padding:20px 14px;text-align:center;cursor:pointer;position:relative;transition:all .2s}
+.dzone:hover,.dzone.over{border-color:var(--orange);background:rgba(255,107,53,.04)}
+.dzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dicon{font-size:1.7rem;display:block;margin-bottom:6px}
+.dtxt{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--muted);line-height:1.55}
+.dtxt strong{color:var(--orange);display:block;margin-bottom:2px}
+.finfo{display:none;align-items:center;gap:9px;background:rgba(57,255,20,.05);border:1px solid rgba(57,255,20,.2);border-radius:8px;padding:10px 12px}
+.finfo.vis{display:flex}
+.fck{color:var(--green);font-size:.95rem;flex-shrink:0}
+.fnw{flex:1;min-width:0}
+.fname{font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--green);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fmet{font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:2px}
+
+/* ── CODE VIEWER ── */
+.cscroll{height:310px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.cscroll::-webkit-scrollbar{width:3px}
+.cscroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.cempty{padding:36px 16px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--muted2)}
+.cl{display:flex;align-items:baseline;font-family:'JetBrains Mono',monospace;font-size:.72rem;line-height:1.72;padding:0 3px;cursor:default;transition:background .1s}
+.cl:hover{background:rgba(0,229,255,.03)}
+.cl .ln{min-width:40px;text-align:right;padding-right:9px;color:var(--muted2);font-size:.62rem;flex-shrink:0;user-select:none}
+.cl .lc{flex:1;padding-right:10px;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.cl.cur{background:rgba(0,229,255,.07);border-left:2px solid var(--cyan)}
+.cl.cur .ln{color:var(--cyan)}.cl.cur .lc{color:#fff}
+.cl.done{opacity:.24}.cl.done .lc{color:var(--green)}.cl.skip{opacity:.16}
+.g0{color:#39ff14}.g1{color:#00e5ff}.g23{color:#b57bee}.gh{color:#ff7b7b}
+.gx{color:#7ec8e3}.gm{color:#ffd600}.gm3{color:#ff9a3c;font-weight:700}.gm5{color:#7dd3fc;font-weight:700}.gp{color:#b5e48c}.ge{color:#ff6b35}.gn{color:#d0e8c0}.cm{color:#1e3350;font-style:italic}
+
+/* ── CANVAS ── */
+.cvwrap{flex:1;min-height:290px;position:relative;overflow:hidden;background:var(--bg);cursor:grab}
+.cvwrap:active{cursor:grabbing}
+#cvs{display:block;width:100%;height:100%}
+.cv-btns{display:flex;gap:5px}
+
+/* ── CONSOLE ── */
+.conlog{height:190px;overflow-y:auto;padding:6px 12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.conlog::-webkit-scrollbar{width:3px}
+.conlog::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.ll{display:flex;gap:7px;align-items:baseline;font-family:'JetBrains Mono',monospace;font-size:.7rem;line-height:1.65}
+.lts{color:var(--muted2);font-size:.6rem;flex-shrink:0}
+.ldir{flex-shrink:0;font-size:.63rem}
+.lmsg{color:var(--text);word-break:break-all}
+.ll.tx .ldir{color:rgba(0,229,255,.5)}.ll.tx .lmsg{color:rgba(197,216,232,.55)}
+.ll.rx .ldir{color:var(--green)}.ll.sys .ldir{color:var(--yellow)}
+.ll.err .ldir{color:var(--red)}.ll.err .lmsg{color:var(--red)}
+.mrow{display:flex;align-items:center;gap:7px;padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border)}
+.mpfx{font-family:'JetBrains Mono',monospace;color:var(--cyan);font-size:.9rem;flex-shrink:0}
+.minp{flex:1;padding:5px 9px;font-size:.73rem}
+.minp:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── MACROS ── */
+.macro-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+@media(max-width:600px){.macro-grid{grid-template-columns:repeat(2,1fr)}}
+.macro-btn{position:relative;border-radius:9px;border:1px solid var(--border2);background:var(--bg2);padding:11px 8px;cursor:pointer;text-align:center;transition:all .18s;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.macro-btn:hover{border-color:var(--muted);background:var(--panel2)}
+.macro-btn:active{transform:scale(.96)}
+.macro-name{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--text);font-weight:500}
+.macro-cmd{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;text-align:center}
+.macro-edit{position:absolute;top:3px;right:4px;background:none;border:none;color:var(--muted2);cursor:pointer;font-size:.65rem;padding:2px;opacity:0;transition:opacity .2s}
+.macro-btn:hover .macro-edit{opacity:1}
+.macro-edit:hover{color:var(--text)}
+
+/* ── STATS TABLE ── */
+.stat-row-item{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.73rem}
+.stat-row-item:last-child{border-bottom:none}
+.stat-row-item .k{color:var(--muted)}
+.stat-row-item .v{color:var(--text);font-weight:500}
+.stat-row-item .v.c{color:var(--cyan)}.stat-row-item .v.g{color:var(--green)}.stat-row-item .v.y{color:var(--yellow)}
+
+/* ── SETTINGS ── */
+.set-row{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
+.set-row:last-child{border-bottom:none}
+.set-lbl{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--text)}
+.set-sub{font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);margin-top:2px}
+@media(max-width:600px){.set-row{grid-template-columns:1fr}}
+
+/* ── GRBL SETTINGS VIEWER ── */
+.grbl-setting{display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--muted2);font-family:'JetBrains Mono',monospace;font-size:.69rem}
+.grbl-setting .gid{color:var(--cyan);min-width:30px}.grbl-setting .gval{color:var(--yellow);min-width:60px}
+.grbl-setting .gcom{color:var(--muted);flex:1;font-size:.62rem}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(5,10,14,.85);z-index:999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:380px;width:90%;position:relative}
+.modal h3{font-family:'Orbitron',monospace;font-size:1rem;color:var(--cyan);margin-bottom:16px}
+.modal label{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--muted);display:block;margin-bottom:4px;margin-top:10px}
+
+/* ── ALERT BANNER ── */
+.alert{border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:.73rem;line-height:1.5;margin-bottom:10px;display:none}
+.alert.vis{display:block}
+.alert.err{background:rgba(255,45,85,.08);border:1px solid rgba(255,45,85,.3);color:var(--red)}
+.alert.warn{background:rgba(255,214,0,.07);border:1px solid rgba(255,214,0,.25);color:var(--yellow)}
+.alert.info{background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.25);color:var(--cyan)}
+
+/* ── STREAM MODE BADGE ── */
+.mode-badge{font-family:'JetBrains Mono',monospace;font-size:.62rem;padding:2px 8px;border-radius:4px;border:1px solid;letter-spacing:.06em}
+.mode-badge.sync{border-color:var(--muted);color:var(--muted)}
+.mode-badge.buf{border-color:var(--cyan);color:var(--cyan)}
+
+/* ── TOAST ── */
+#tc{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:9px;padding:10px 15px;font-family:'JetBrains Mono',monospace;font-size:.72rem;min-width:190px;max-width:340px;pointer-events:all;animation:tI .3s ease forwards;color:var(--text)}
+.toast.ok{border-left-color:var(--green)}.toast.err{border-left-color:var(--red);color:var(--red)}.toast.warn{border-left-color:var(--yellow)}
+@keyframes tI{from{transform:translateX(50px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes tO{from{transform:translateX(0);opacity:1}to{transform:translateX(50px);opacity:0}}
+.warn-banner{display:none;background:rgba(255,214,0,.06);border:1px solid rgba(255,214,0,.22);border-left:3px solid var(--yellow);border-radius:var(--r);padding:10px 14px;margin-bottom:11px;font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--yellow);line-height:1.5}
+.kb-bar{margin-top:12px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:9px 14px;font-family:'JetBrains Mono',monospace;font-size:.63rem;color:var(--muted);text-align:center}
+.kb-bar b{color:var(--text)}
+/* ── WAKE LOCK INDICATOR ── */
+.wl-pill{display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:.63rem;letter-spacing:.08em;color:var(--muted);transition:color .3s,border-color .3s;user-select:none;cursor:default;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:4px 10px}
+.wl-pill.active{color:var(--green);border-color:rgba(57,255,20,.35)}
+.wl-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="logo">G<span class="sep">·</span>FLOW<span class="ver">PRO v4</span></div>
+  <div class="hdr-r">
+    <select id="fwSel" class="isml">
+      <option value="grbl">GRBL / CNC</option>
+      <option value="marlin">Marlin 3D</option>
+      <option value="generic">Generic</option>
+    </select>
+    <span class="mode-badge" id="modeBadge">SYNC</span>
+    <div class="wl-pill" id="wakeLockPill" title="Screen Wake Lock — keeps screen on during long jobs"><span class="wl-dot"></span><span id="wlTxt">AWAKE OFF</span></div>
+    <div class="pill" id="pill"><span class="sdot" id="sdot"></span><span id="stxt">DISCONNECTED</span></div>
+  </div>
+</div>
+
+<!-- WEB SERIAL WARNING -->
+<div class="warn-banner" id="warnBanner">⚠ Web Serial requires <strong>Chrome or Edge desktop (v89+)</strong>. Save this file locally and open it directly. Firefox / Safari unsupported.</div>
+
+<!-- MACHINE STATUS BAR -->
+<div class="mbar">
+  <div class="ms"><span class="ml">STATE</span><span class="mv" id="eState" style="font-size:.82rem;color:var(--muted)">—</span></div>
+  <div class="msp"></div>
+  <div class="ms"><span class="ml">MPOS</span>
+    <div class="mvc">
+      <span class="mcc"><span class="ax">X </span><span class="vl" id="eMX">—</span></span>
+      <span class="mcc"><span class="ax">Y </span><span class="vl" id="eMY">—</span></span>
+      <span class="mcc"><span class="ax">Z </span><span class="vl" id="eMZ">—</span></span>
+    </div>
+  </div>
+  <div class="msp"></div>
+  <div class="ms"><span class="ml">WPOS</span>
+    <div class="mvc">
+      <span class="mcc"><span class="ax">X </span><span class="vl" id="eWX">—</span></span>
+      <span class="mcc"><span class="ax">Y </span><span class="vl" id="eWY">—</span></span>
+      <span class="mcc"><span class="ax">Z </span><span class="vl" id="eWZ">—</span></span>
+    </div>
+  </div>
+  <div class="msp"></div>
+  <div class="ms"><span class="ml">F</span><span class="mv" id="eFeed">—</span></div>
+  <div class="ms"><span class="ml">S</span><span class="mv" id="eSpindle">—</span></div>
+  <div class="msp"></div>
+  <div class="ms"><span class="ml">OVR</span><span class="ovr-disp" id="eOvr">F:—% S:—%</span></div>
+  <div class="msp"></div>
+  <div class="ms" style="gap:8px">
+    <label class="ck"><input type="checkbox" id="pollCb" checked onchange="onPollToggle()"> Poll</label>
+    <input type="number" id="pollMs" value="1000" min="200" max="9999" class="isml" style="width:62px">
+    <span class="ul">ms</span>
+  </div>
+</div>
+
+<!-- CONNECTION BAR -->
+<div class="cbar">
+  <select id="baudSel" class="isml"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option value="115200" selected>115200</option><option>250000</option></select>
+  <select id="nlSel" class="isml"><option value="LF" selected>LF</option><option value="CR">CR</option><option value="CRLF">CR+LF</option><option value="NONE">None</option></select>
+  <button class="btn bcyan bsm" id="btnConn" onclick="doConnect()">⚡ Connect</button>
+  <button class="btn bred bsm" id="btnDisc" onclick="doDisconnect()" disabled>✕ Disc</button>
+  <button class="btn bghost bsm" id="btnRst" onclick="grblSoftReset()" disabled title="Soft Reset Ctrl+X">↺ Reset</button>
+  <button class="btn byellow bsm" id="btnUnlock" onclick="grblUnlock()" disabled title="Kill Alarm $X">🔓 Unlock</button>
+  <button class="btn bghost bsm" id="btnHome" onclick="grblHome()" disabled title="Home $H">⌂ Home</button>
+  <span class="port-inf" id="ePI">No port</span>
+  <label class="ck" style="margin-left:auto"><input type="checkbox" id="autoReCb"> Auto-reconnect</label>
+</div>
+
+<!-- ALERT BANNER -->
+<div class="alert" id="alertBanner"></div>
+
+<!-- TAB NAVIGATION -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('stream',this)">⚡ STREAM</button>
+  <button class="tab" onclick="switchTab('jog',this)">🕹 JOG</button>
+  <button class="tab" onclick="switchTab('macros',this)">⚑ MACROS</button>
+  <button class="tab" onclick="switchTab('console',this)">⌨ CONSOLE</button>
+  <button class="tab" onclick="switchTab('stats',this)">📊 STATS</button>
+  <button class="tab" onclick="switchTab('settings',this)">⚙ SETTINGS</button>
+</div>
+
+<!-- ═══ TAB: STREAM ═══ -->
+<div id="t-stream" class="tab-pane active">
+
+  <div class="g2">
+    <!-- File panel -->
+    <div class="panel"><div class="pt o"></div>
+      <div class="phdr">// g-code file
+        <div class="row" style="gap:6px">
+          <button class="btn bghost bxs" onclick="openFileNative()" title="Native file picker">📁 Open</button>
+          <button class="btn bghost bxs" onclick="resumeFromLine()" id="btnResume" disabled>↳ Resume from…</button>
+        </div>
+      </div>
+      <div class="pbody">
+        <div class="dzone" id="dzone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <input type="file" id="fInput" accept=".gcode,.nc,.ngc,.tap,.cnc,.g" onchange="onFileChange(this)">
+          <span class="dicon">📂</span>
+          <div class="dtxt"><strong>Drop .gcode / .nc file here</strong>or click · .gcode .nc .ngc .tap</div>
+        </div>
+        <div class="finfo" id="fInfo"><span class="fck">✓</span><div class="fnw"><div class="fname" id="eFName">—</div><div class="fmet" id="eFMet">—</div></div><button class="btn bghost bxs" onclick="clearFile()">✕</button></div>
+      </div>
+    </div>
+
+    <!-- Controls panel -->
+    <div class="panel"><div class="pt"></div>
+      <div class="phdr">// job controls</div>
+      <div class="pbody">
+        <div class="row mb10">
+          <button class="btn bgreen" id="btnPlay" onclick="doPlay()" disabled>▶ Play</button>
+          <button class="btn byellow" id="btnPause" onclick="doPause()" disabled>⏸ Pause</button>
+          <button class="btn bred" id="btnStop" onclick="doStop()" disabled>■ Stop</button>
+          <button class="btn bcyan" id="btnStep" onclick="doStep()" disabled title="Ctrl+S">↓ Step</button>
+          <button class="btn bghost" id="btnRew" onclick="doRewind()" disabled>⏮</button>
+        </div>
+        <div class="row" style="gap:12px;flex-wrap:wrap">
+          <label class="ck"><input type="checkbox" id="waitOk" checked> Wait OK</label>
+          <label class="ck"><input type="checkbox" id="bufMode" onchange="onBufModeChange()"> Buffer Stream</label>
+          <div class="row" style="gap:5px"><span class="ul">Delay</span><input type="number" id="lineDelay" value="0" min="0" max="9999" step="10" class="isml" style="width:56px"><span class="ul">ms</span></div>
+          <label class="ck"><input type="checkbox" id="autoScr" checked> Scroll</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="g6">
+    <div class="scard"><div class="sn" id="eTotal">—</div><div class="sl">Exec Lines</div></div>
+    <div class="scard"><div class="sn o" id="eSent">0</div><div class="sl">Sent</div></div>
+    <div class="scard"><div class="sn g" id="eOk">0</div><div class="sl">OK</div></div>
+    <div class="scard"><div class="sn r" id="eErr">0</div><div class="sl">Errors</div></div>
+    <div class="scard"><div class="sn y" id="eElap">0:00</div><div class="sl">Elapsed</div></div>
+    <div class="scard"><div class="sn p" id="eEta">—</div><div class="sl">ETA</div></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="ppanel">
+    <div class="ptrow"><span class="pinf" id="ePL">Line 0 / 0</span><span class="ppct" id="ePP">0%</span></div>
+    <div class="pbg"><div class="pf idle" id="pF"></div></div>
+  </div>
+
+  <!-- Code viewer + 3D Canvas -->
+  <div class="g2" style="align-items:stretch;min-height:340px">
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="phdr">// g-code viewer
+        <div class="row" style="gap:6px">
+          <input type="search" id="cSearch" class="isml" placeholder="Filter…" oninput="filterCode(this.value)" style="width:115px">
+          <span class="msm" id="eLCnt"></span>
+        </div>
+      </div>
+      <div class="cscroll" id="cScroll"><div class="cempty">No file loaded</div></div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="phdr">// toolpath preview · drag=pan · scroll=zoom
+        <div class="cv-btns">
+          <button class="btn bghost bxs" onclick="cvZoom(1.3)">＋</button>
+          <button class="btn bghost bxs" onclick="cvZoom(0.75)">－</button>
+          <button class="btn bghost bxs" onclick="cvFit()">⊡</button>
+          <button class="btn bghost bxs" id="btnWS" onclick="toggleWorkspace()">Area</button>
+          <button class="btn bghost bxs" id="btn3D" onclick="toggle3D()">3D</button>
+          <span class="msm" id="eCvI"></span>
+        </div>
+      </div>
+      <div class="cvwrap" id="cvWrap"><canvas id="cvs"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ TAB: JOG ═══ -->
+<div id="t-jog" class="tab-pane">
+  <div class="g2">
+
+    <div class="panel"><div class="pt g"></div>
+      <div class="phdr">// jog controls</div>
+      <div class="pbody">
+        <!-- Step size -->
+        <div style="margin-bottom:10px;text-align:center">
+          <div class="ul" style="margin-bottom:7px">STEP SIZE (mm)</div>
+          <div class="jog-steps" id="jogStepBtns">
+            <button class="step-btn" onclick="setJogStep(0.01)">0.01</button>
+            <button class="step-btn" onclick="setJogStep(0.1)">0.1</button>
+            <button class="step-btn active" onclick="setJogStep(1)">1</button>
+            <button class="step-btn" onclick="setJogStep(5)">5</button>
+            <button class="step-btn" onclick="setJogStep(10)">10</button>
+            <button class="step-btn" onclick="setJogStep(50)">50</button>
+            <button class="step-btn" onclick="setJogStep(100)">100</button>
+          </div>
+        </div>
+
+        <!-- Jog pad + Z -->
+        <div class="row" style="justify-content:center;gap:20px">
+          <div>
+            <div class="jog-grid">
+              <div></div>
+              <button class="jog-btn" id="jY+" onclick="jog('Y',1)" disabled>Y+</button>
+              <div></div>
+              <button class="jog-btn" id="jX-" onclick="jog('X',-1)" disabled>X−</button>
+              <button class="jog-btn home" id="jHm" onclick="jogGoHome()" disabled title="Go to work zero (G0 X0 Y0)">⊙</button>
+              <button class="jog-btn" id="jX+" onclick="jog('X',1)" disabled>X+</button>
+              <div></div>
+              <button class="jog-btn" id="jY-" onclick="jog('Y',-1)" disabled>Y−</button>
+              <div></div>
+            </div>
+            <div style="text-align:center;margin-top:6px">
+              <button class="btn bred bsm" id="btnJogCancel" onclick="jogCancel()" disabled>⛔ Cancel Jog</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px;align-items:center">
+            <div class="ul">Z AXIS</div>
+            <button class="jog-btn z" style="width:60px;height:60px" id="jZ+" onclick="jog('Z',1)" disabled>Z+</button>
+            <button class="jog-btn z" style="width:60px;height:60px" id="jZ-" onclick="jog('Z',-1)" disabled>Z−</button>
+            <div class="ul" style="margin-top:8px">PEN TEST</div>
+            <button class="btn bcyan bsm" id="btnPenDown" onclick="penTestDown()" disabled style="width:60px;justify-content:center" title="Send M3 S{penDownVal} — lower pen to paper">↓ Down</button>
+            <button class="btn borange bsm" id="btnPenUp" onclick="penTestUp()" disabled style="width:60px;justify-content:center" title="Send M3 S{penUpVal} — raise pen off paper">↑ Up</button>
+          </div>
+        </div>
+
+        <!-- Jog feed -->
+        <div class="row" style="margin-top:12px;gap:8px">
+          <span class="ul">Jog Feed:</span>
+          <input type="number" id="jogFeed" value="500" min="1" max="10000" class="isml" style="width:80px">
+          <span class="ul">mm/min</span>
+          <button class="btn bghost bsm" onclick="jogGoHome()" id="btnGoHome" disabled>Go Work Zero</button>
+          <button class="btn bghost bsm" onclick="grblHome()" id="btnMachHome" disabled>Machine Home</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel"><div class="pt p"></div>
+      <div class="phdr">// feed & spindle overrides (GRBL 1.1)</div>
+      <div class="pbody">
+
+        <!-- Feed override -->
+        <div class="ul" style="margin-bottom:8px">FEED RATE OVERRIDE</div>
+        <div class="slider-wrap">
+          <span class="slider-lbl">Rate</span>
+          <input type="range" id="feedOvr" min="10" max="200" value="100" oninput="onFeedOvrSlider(this.value)" disabled>
+          <span class="slider-val" id="eFOvr">100%</span>
+        </div>
+        <div class="row mb10">
+          <button class="btn bghost bxs" onclick="sendFeedOvr('minus10')" disabled id="bFM10">−10%</button>
+          <button class="btn bghost bxs" onclick="sendFeedOvr('minus1')"  disabled id="bFM1">−1%</button>
+          <button class="btn bcyan bxs"  onclick="sendFeedOvr('reset')"   disabled id="bFR">100%</button>
+          <button class="btn bghost bxs" onclick="sendFeedOvr('plus1')"   disabled id="bFP1">+1%</button>
+          <button class="btn bghost bxs" onclick="sendFeedOvr('plus10')"  disabled id="bFP10">+10%</button>
+        </div>
+
+        <!-- Rapid override -->
+        <div class="ul" style="margin-bottom:8px">RAPID OVERRIDE</div>
+        <div class="row mb10">
+          <button class="btn bcyan bxs"  onclick="sendRapidOvr('full')"    disabled id="bRF">100%</button>
+          <button class="btn bghost bxs" onclick="sendRapidOvr('half')"    disabled id="bRH">50%</button>
+          <button class="btn bghost bxs" onclick="sendRapidOvr('quarter')" disabled id="bRQ">25%</button>
+        </div>
+
+        <!-- Spindle override -->
+        <div class="ul" style="margin-bottom:8px">SPINDLE OVERRIDE</div>
+        <div class="slider-wrap">
+          <span class="slider-lbl">Rate</span>
+          <input type="range" class="green" id="spindleOvr" min="10" max="200" value="100" oninput="onSpindleOvrSlider(this.value)" disabled>
+          <span class="slider-val" id="eSOvr" style="color:var(--green)">100%</span>
+        </div>
+        <div class="row mb10">
+          <button class="btn bghost bxs" onclick="sendSpindleOvr('minus10')" disabled id="bSM10">−10%</button>
+          <button class="btn bghost bxs" onclick="sendSpindleOvr('minus1')"  disabled id="bSM1">−1%</button>
+          <button class="btn bgreen bxs" onclick="sendSpindleOvr('reset')"   disabled id="bSR2">100%</button>
+          <button class="btn bghost bxs" onclick="sendSpindleOvr('plus1')"   disabled id="bSP1">+1%</button>
+          <button class="btn bghost bxs" onclick="sendSpindleOvr('plus10')"  disabled id="bSP10">+10%</button>
+        </div>
+
+        <!-- GRBL quick -->
+        <div class="ul" style="margin-bottom:7px">GRBL REALTIME</div>
+        <div class="row">
+          <button class="btn bghost bsm" id="bFH" onclick="grblFeedHold()"   disabled title="Feed Hold (!)">⏸ Hold</button>
+          <button class="btn bghost bsm" id="bCY" onclick="grblCycleStart()" disabled title="Cycle Start (~)">▶ Cycle</button>
+          <button class="btn bghost bsm" id="bGG" onclick="grblGcState()"    disabled>$G</button>
+          <button class="btn bghost bsm" id="bSS" onclick="grblViewSettings()" disabled>$$</button>
+          <button class="btn bghost bsm" id="bZW" onclick="grblZeroWork()"   disabled>Zero WCS</button>
+          <button class="btn bghost bsm" id="bCM" onclick="grblCheckMode()"  disabled>$C</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ TAB: MACROS ═══ -->
+<div id="t-macros" class="tab-pane">
+  <div class="panel mb10"><div class="pt o"></div>
+    <div class="phdr">// macro buttons (click to send · pencil to edit)
+      <button class="btn bghost bxs" onclick="resetMacros()">Reset Defaults</button>
+    </div>
+    <div class="pbody">
+      <div class="macro-grid" id="macroGrid"></div>
+    </div>
+  </div>
+  <div class="panel"><div class="pt"></div>
+    <div class="phdr">// manual command</div>
+    <div class="conlog" id="macroLog" style="height:160px"></div>
+    <div class="mrow">
+      <span class="mpfx">›</span>
+      <input type="text" id="mInp" class="minp inp" placeholder="Type command, Enter to send · ↑↓ history" onkeydown="onManualKey(event)" disabled>
+      <button class="btn bcyan bsm" id="btnMS" onclick="doManualSend()" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: CONSOLE ═══ -->
+<div id="t-console" class="tab-pane">
+  <div class="panel"><div class="pt"></div>
+    <div class="phdr">// serial console (full log)
+      <div class="row" style="gap:7px">
+        <label class="ck"><input type="checkbox" id="pauseLog"> Pause</label>
+        <label class="ck"><input type="checkbox" id="rxOnly"> RX only</label>
+        <button class="btn bghost bsm" onclick="exportLog()">⬇ Export</button>
+        <button class="btn bghost bsm" onclick="clearLog()">Clear</button>
+      </div>
+    </div>
+    <div class="conlog" id="conLog" style="height:380px"></div>
+    <div class="mrow">
+      <span class="mpfx">›</span>
+      <input type="text" id="mInp2" class="minp inp" placeholder="Command · Enter to send" onkeydown="onManualKey2(event)" disabled>
+      <button class="btn bcyan bsm" id="btnMS2" onclick="doManualSend2()" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: STATS ═══ -->
+<div id="t-stats" class="tab-pane">
+  <div class="g2">
+    <div class="panel"><div class="pt g"></div>
+      <div class="phdr">// g-code analysis</div>
+      <div class="pbody" id="statsBody"><div class="cempty">Load a file to see statistics</div></div>
+    </div>
+    <div class="panel"><div class="pt p"></div>
+      <div class="phdr">// recent files (IndexedDB)</div>
+      <div class="pbody" id="recentBody"><div class="cempty">No recent files</div></div>
+    </div>
+  </div>
+  <div class="panel"><div class="pt o"></div>
+    <div class="phdr">// grbl settings ($$ report)</div>
+    <div class="pbody" id="grblSettingsBody"><div class="cempty">Connect and run $$ to view</div></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: SETTINGS ═══ -->
+<div id="t-settings" class="tab-pane">
+  <div class="g2">
+    <div class="panel"><div class="pt"></div>
+      <div class="phdr">// machine profile</div>
+      <div class="pbody">
+        <div class="set-row"><div><div class="set-lbl">Profile Name</div></div><input type="text" id="sProfileName" class="inp" value="My CNC" style="width:100%"></div>
+        <div class="set-row"><div><div class="set-lbl">Work Area X</div></div><div class="row"><input type="number" id="sAreaX" class="isml" value="200" style="width:80px"><span class="ul">mm</span></div></div>
+        <div class="set-row"><div><div class="set-lbl">Work Area Y</div></div><div class="row"><input type="number" id="sAreaY" class="isml" value="200" style="width:80px"><span class="ul">mm</span></div></div>
+        <div class="set-row"><div><div class="set-lbl">Max Feed XY</div></div><div class="row"><input type="number" id="sMaxF" class="isml" value="3000" style="width:80px"><span class="ul">mm/min</span></div></div>
+        <div class="set-row"><div><div class="set-lbl">Spindle Max</div></div><div class="row"><input type="number" id="sSMax" class="isml" value="12000" style="width:80px"><span class="ul">RPM</span></div></div>
+        <div class="row" style="margin-top:14px;gap:8px">
+          <button class="btn bcyan bsm" onclick="saveProfile()">💾 Save Profile</button>
+          <button class="btn bghost bsm" onclick="loadProfileList()">📂 Load</button>
+        </div>
+        <div id="profileList" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="panel"><div class="pt o"></div>
+      <div class="phdr">// stream & notifications</div>
+      <div class="pbody">
+        <div class="set-row">
+          <div><div class="set-lbl">Stream Mode</div><div class="set-sub">Buffer: faster (GRBL 1.1). Sync: safer.</div></div>
+          <select id="streamModeSel" class="inp" onchange="onStreamModeChange()">
+            <option value="sync">Sync (wait for OK)</option>
+            <option value="buffer">Buffer (GRBL 1.1, 127-byte)</option>
+          </select>
+        </div>
+        <div class="set-row">
+          <div><div class="set-lbl">GRBL Buffer Size</div><div class="set-sub">127 bytes for standard GRBL</div></div>
+          <div class="row"><input type="number" id="bufSize" value="127" min="32" max="512" class="isml" style="width:70px"><span class="ul">bytes</span></div>
+        </div>
+        <div class="set-row">
+          <div><div class="set-lbl">Notifications</div><div class="set-sub">Desktop alert when job finishes</div></div>
+          <button class="btn bghost bsm" onclick="requestNotifPerm()">Request Permission</button>
+        </div>
+        <div class="set-row">
+          <div><div class="set-lbl">Sound Alert</div></div>
+          <label class="ck"><input type="checkbox" id="soundCb"> Beep on complete</label>
+        </div>
+        <div class="set-row">
+          <div><div class="set-lbl">On Error</div></div>
+          <select id="errActionSel" class="inp">
+            <option value="stop">Stop streaming</option>
+            <option value="skip">Skip line and continue</option>
+            <option value="ask">Prompt (stop and show)</option>
+          </select>
+        </div>
+        <div class="set-row">
+          <div><div class="set-lbl">Checksum (Marlin)</div><div class="set-sub">Prepend N# and *checksum</div></div>
+          <label class="ck"><input type="checkbox" id="checksumCb"> Enable (Marlin)</label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- KEYBOARD SHORTCUTS BAR -->
+<div class="kb-bar">
+  <b>Keys:</b>&nbsp; Space=Play/Pause · Esc=Stop · R=Rewind · Ctrl+S=Step · ?=Poll · !=Hold · ~=Cycle
+</div>
+
+</div><!-- .app -->
+
+<!-- MACRO EDIT MODAL -->
+<div class="modal-overlay" id="macroModal" style="display:none">
+  <div class="modal">
+    <h3>Edit Macro</h3>
+    <label>Name</label>
+    <input type="text" id="meName" class="inp" style="width:100%" placeholder="Button label">
+    <label>Command</label>
+    <input type="text" id="meCmd" class="inp" style="width:100%;margin-bottom:4px" placeholder="G-code command(s)">
+    <div class="msm" style="margin-bottom:12px">Multiple commands: separate with semicolons e.g. <em>G28; G0 X0 Y0</em></div>
+    <label>Color</label>
+    <div class="row" style="margin-bottom:16px;gap:6px">
+      <button class="btn bcyan bxs"   onclick="setMC('cyan')">Cyan</button>
+      <button class="btn bgreen bxs"  onclick="setMC('green')">Green</button>
+      <button class="btn byellow bxs" onclick="setMC('yellow')">Yellow</button>
+      <button class="btn borange bxs" onclick="setMC('orange')">Orange</button>
+      <button class="btn bred bxs"    onclick="setMC('red')">Red</button>
+      <button class="btn bghost bxs"  onclick="setMC('ghost')">Ghost</button>
+    </div>
+    <div class="row" style="gap:8px">
+      <button class="btn bcyan" onclick="saveMacroEdit()">Save</button>
+      <button class="btn bghost" onclick="closeMacroModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="tc"></div>
+
+<script>
+'use strict';
+
+// ════════ UTILITIES (hoisted) ════════
+function $(id)        { return document.getElementById(id); }
+function txt(id,v)    { const e=$(id); if(e) e.textContent=(v??'').toString(); }
+function sv(id,v)     { const e=$(id); if(e) e.value=v; }
+function dis(id,d)    { const e=$(id); if(e) e.disabled=!!d; }
+function p2(n)        { return String(n).padStart(2,'0'); }
+function fmt(s)       { return `${Math.floor(s/60)}:${p2(s%60)}`; }
+function hexI(v)      { return v!=null?'0x'+v.toString(16).toUpperCase().padStart(4,'0'):'?'; }
+function esc(s)       { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function cb(id)       { return !!$(id)?.checked; }
+function num(id,def)  { return parseInt($(id)?.value)||def; }
+function sel(id)      { return $(id)?.value||''; }
+
+// ════════ STATE ════════
+// sPort kept as truthy/falsy connection flag — required by sim-patch (toggleSim: if(!sPort)connected=false)
+// sWriter, sReader, sLoop removed — Web Serial API objects replaced by Cordova serial plugin, now replaced by @leeskies/capacitor-usb-serial
+let sPort=null, connected=false;
+let rxBuffer=''; // persistent RX reassembly buffer for native 'data' events
+// Capacitor USB Serial handles — portId from open(), listener handles removed on disconnect
+let usbPortId=null, usbDataListener=null, usbErrorListener=null, usbDetachListener=null;
+let rawLines=[], lineMap=[], lmIdx=null, jobIdx=0;
+let playing=false, paused=false;
+let waitingOk=false, sendTimer=null;
+let sSent=0, sOk=0, sErr=0, tStart=null, elapInt=null;
+let gState='—', mPos={x:0,y:0,z:0}, wPos={x:0,y:0,z:0};
+let gFeed=0, gSpindle=0, gOvr={f:100,r:100,s:100}, pollInt=null;
+let grblSettingsMap={};
+// Buffer streaming
+let grblBufQueue=[], grblBufUsed=0;
+let GRBL_BUF=127, streamMode='sync';
+// Canvas
+let tp=[], tpB=null, cvSc=1, cvPan={x:0,y:0}, donePct=0, view3D=false, showWorkspace=true;
+// Wake Lock
+let wakeLock=null;
+// Jog
+let jogStep=1, jogFeedVal=500;
+// Macros
+let macros=[];
+let editingMacroIdx=-1, editingMacroColor='cyan';
+// History
+let hist=[], histIdx=-1;
+let hist2=[], histIdx2=-1;
+// Code filter
+let cFilter='';
+// Stats
+let fileStats=null;
+// DB
+let db=null;
+// Checksum
+let lineCounter=0;
+
+// ════════ GRBL ERROR CODES ════════
+const GRBL_ERR={1:'Expected cmd letter',2:'Bad number format',3:'Invalid statement',4:'Negative value',5:'Homing disabled',6:'Step pulse too short',7:'EEPROM read failed',8:'Idle only',9:'G-code in queue',10:'Soft limits need homing',11:'Line too long',12:'Step rate exceeds 65535',15:'Jog exceeds travel',16:'Jog missing F word',20:'Unsupported command',21:'Modal group violation',22:'Undefined feed rate',23:'Integer required',24:'Not allowed during homing',25:'Negative value',26:'Max spindle exceeded',27:'Min spindle exceeded'};
+
+// ════════ INIT ════════
+document.addEventListener('DOMContentLoaded',async()=>{
+  // navigator.serial check removed — Cordova serial plugin provides the global `serial` object on Android
+  loadCfg();
+  loadMacros();
+  renderMacros();
+  initCanvas();
+  updateUI();
+  renderCanvas();
+  // Set initial button tint states
+  const wsBtn=$('btnWS');if(wsBtn)wsBtn.style.color=showWorkspace?'var(--yellow)':'';
+  updateWakeLockUI();
+  db=await initDB().catch(()=>null);
+  loadRecentFiles();
+  loadProfileList();
+});
+
+// ════════ SETTINGS ════════
+function loadCfg(){
+  try{
+    const c=JSON.parse(localStorage.getItem('gflow3')||'{}');
+    if(c.baud) sv('baudSel',c.baud);
+    if(c.nl)   sv('nlSel',c.nl);
+    if(c.fw)   sv('fwSel',c.fw);
+    if(c.delay!=null) sv('lineDelay',c.delay);
+    if(c.pollMs) sv('pollMs',c.pollMs);
+    if(c.waitOk!=null)   $('waitOk').checked   =c.waitOk;
+    if(c.pollGrbl!=null) $('pollCb').checked   =c.pollGrbl;
+    if(c.autoScr!=null)  $('autoScr').checked  =c.autoScr;
+    if(c.streamMode)   { sv('streamModeSel',c.streamMode); streamMode=c.streamMode; $('bufMode').checked=(c.streamMode==='buffer'); }
+    if(c.bufSize)      sv('bufSize',c.bufSize);
+    if(c.sound!=null)  $('soundCb').checked=c.sound;
+    if(c.checksum!=null) $('checksumCb').checked=c.checksum;
+    if(c.errAction)    sv('errActionSel',c.errAction);
+  }catch(_){}
+}
+
+function saveCfg(){
+  try{
+    localStorage.setItem('gflow3',JSON.stringify({
+      baud:sel('baudSel'),nl:sel('nlSel'),fw:sel('fwSel'),
+      delay:num('lineDelay',0),pollMs:num('pollMs',1000),
+      waitOk:cb('waitOk'),pollGrbl:cb('pollCb'),autoScr:cb('autoScr'),
+      streamMode:streamMode,bufSize:num('bufSize',127),
+      sound:cb('soundCb'),checksum:cb('checksumCb'),errAction:sel('errActionSel')
+    }));
+  }catch(_){}
+}
+
+function onBufModeChange(){
+  streamMode=$('bufMode').checked?'buffer':'sync';
+  sv('streamModeSel',streamMode);
+  updateModeBadge();
+}
+
+function onStreamModeChange(){
+  streamMode=sel('streamModeSel');
+  $('bufMode').checked=(streamMode==='buffer');
+  updateModeBadge();
+}
+
+function updateModeBadge(){
+  const b=$('modeBadge');
+  if(!b) return;
+  b.className='mode-badge '+(streamMode==='buffer'?'buf':'sync');
+  b.textContent=streamMode==='buffer'?'BUFFER':'SYNC';
+}
+
+// ════════ MACHINE PROFILES ════════
+function saveProfile(){
+  const p={name:$('sProfileName').value||'Profile',areaX:num('sAreaX',200),areaY:num('sAreaY',200),maxF:num('sMaxF',3000),sMax:num('sSMax',12000),date:new Date().toISOString()};
+  let profs=[];
+  try{profs=JSON.parse(localStorage.getItem('gflow_profs')||'[]');}catch(_){}
+  const i=profs.findIndex(x=>x.name===p.name);
+  if(i>=0) profs[i]=p; else profs.push(p);
+  localStorage.setItem('gflow_profs',JSON.stringify(profs));
+  loadProfileList();
+  toast('Profile saved: '+p.name,'ok');
+}
+
+function loadProfileList(){
+  let profs=[];
+  try{profs=JSON.parse(localStorage.getItem('gflow_profs')||'[]');}catch(_){}
+  const el=$('profileList');
+  if(!el) return;
+  if(!profs.length){el.innerHTML='<div class="cempty" style="padding:10px">No saved profiles</div>';return;}
+  el.innerHTML=profs.map(p=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border2)">
+      <span style="font-family:JetBrains Mono,monospace;font-size:.72rem;color:var(--text);flex:1">${esc(p.name)}</span>
+      <button class="btn bghost bxs" onclick="applyProfile('${esc(p.name)}')">Load</button>
+      <button class="btn bred bxs" onclick="deleteProfile('${esc(p.name)}')">✕</button>
+    </div>`).join('');
+}
+
+function applyProfile(name){
+  let profs=[];
+  try{profs=JSON.parse(localStorage.getItem('gflow_profs')||'[]');}catch(_){}
+  const p=profs.find(x=>x.name===name);
+  if(!p) return;
+  sv('sProfileName',p.name); sv('sAreaX',p.areaX); sv('sAreaY',p.areaY); sv('sMaxF',p.maxF); sv('sSMax',p.sMax);
+  toast('Profile loaded: '+p.name,'ok');
+}
+
+function deleteProfile(name){
+  let profs=[];
+  try{profs=JSON.parse(localStorage.getItem('gflow_profs')||'[]');}catch(_){}
+  profs=profs.filter(x=>x.name!==name);
+  localStorage.setItem('gflow_profs',JSON.stringify(profs));
+  loadProfileList();
+}
+
+// ════════ INDEXEDDB ════════
+async function initDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open('gflow3',1);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains('files')) d.createObjectStore('files',{keyPath:'id',autoIncrement:true});
+    };
+    req.onsuccess=e=>{res(e.target.result);};
+    req.onerror=()=>rej(req.error);
+  });
+}
+
+async function saveRecentFile(name,size,lines){
+  if(!db) return;
+  const tx=db.transaction('files','readwrite');
+  const s=tx.objectStore('files');
+  s.add({name,size,lines,date:new Date().toISOString()});
+}
+
+async function loadRecentFiles(){
+  const el=$('recentBody'); if(!el) return;
+  if(!db){el.innerHTML='<div class="cempty">IndexedDB unavailable</div>';return;}
+  const all=await new Promise(res=>{
+    const tx=db.transaction('files','readonly');
+    const req=tx.objectStore('files').getAll();
+    req.onsuccess=()=>res(req.result||[]);
+    req.onerror=()=>res([]);
+  });
+  const recent=all.slice(-10).reverse();
+  if(!recent.length){el.innerHTML='<div class="cempty">No recent files</div>';return;}
+  el.innerHTML=recent.map(f=>`<div class="stat-row-item"><span class="k">${esc(f.name)}</span><span class="v">${f.lines} lines · ${(f.size/1024).toFixed(1)}KB</span></div>`).join('');
+}
+
+// ════════ SERIAL CONNECTION (Capacitor USB Serial — @leeskies/capacitor-usb-serial) ════════
+function getUsbSerial(){
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UsbSerial) || null;
+}
+
+// Minimal device picker for the rare multi-adapter case — no new UI, just a prompt,
+// so the rest of the app's UI stays untouched. Returns the chosen device, or null on cancel.
+function pickUsbDevice(devices){
+  const list=devices.map(function(d,i){return (i+1)+': '+(d.driverType||'USB')+' — '+(d.deviceName||d.deviceId);}).join('\n');
+  const choice=window.prompt('Multiple USB devices found:\n'+list+'\n\nEnter a number:','1');
+  const idx=parseInt(choice,10)-1;
+  if(isNaN(idx)||idx<0||idx>=devices.length) return null;
+  return devices[idx];
+}
+
+async function doConnect(){
+  saveCfg();
+  const baud=num('baudSel',115200);
+
+  const UsbSerial=getUsbSerial();
+  if(!UsbSerial){ toast('USB Serial plugin not loaded!','err'); return; }
+
+  try{
+    const {devices}=await UsbSerial.listDevices();
+    if(!devices||!devices.length){
+      toast('No USB device found — check OTG cable/adapter','err');
+      return;
+    }
+    let device=devices[0];
+    if(devices.length>1){
+      device=pickUsbDevice(devices);
+      if(!device){ toast('Connect cancelled','warn'); return; }
+    }
+
+    if(!device.hasPermission){
+      const {granted}=await UsbSerial.requestPermission({deviceId:device.deviceId});
+      if(!granted){ toast('USB permission denied','err'); sysLog('ERR permission denied'); return; }
+    }
+
+    const {portId}=await UsbSerial.open({deviceId:device.deviceId,portNum:0});
+    usbPortId=portId;
+
+    await UsbSerial.setParameters({
+      portId:   portId,
+      baudRate: baud,
+      dataBits: 8,
+      stopBits: 1,
+      parity:   'none'
+    });
+
+    sPort    =true;      // truthy flag — keeps sim-patch if(!sPort) logic intact
+    connected=true;
+    rxBuffer ='';
+
+    // ── Native read events (replaces registerReadCallback entirely) ──────
+    usbDataListener=await UsbSerial.addListener('data',function(ev){
+      let str;
+      try{ str=atob(ev.data); }catch(e){ str=''; }
+      rxBuffer+=str;
+      let nl;
+      while((nl=rxBuffer.indexOf('\n'))!==-1){
+        const line=rxBuffer.slice(0,nl).replace(/\r/g,'').trim();
+        rxBuffer=rxBuffer.slice(nl+1);
+        if(line) handleRx(line);
+      }
+    });
+    usbErrorListener=await UsbSerial.addListener('error',function(ev){
+      sysLog('Serial read error: '+(ev&&ev.message?ev.message:JSON.stringify(ev)));
+    });
+    usbDetachListener=await UsbSerial.addListener('detached',function(){
+      sysLog('USB device detached');
+      doDisconnect();
+    });
+
+    await UsbSerial.startReading({portId:portId});
+    // ── End read events ────────────────────────────────────────────
+
+    startPoll();
+    updateUI();
+    txt('ePI','Capacitor USB @ '+baud);
+    sysLog('Connected at '+baud+' baud');
+    grblSettingsMap={};
+    setTimeout(function(){rawStr('$$');sysLog('→ Auto $$ — querying axis config…');},500);
+    toast('Connected!','ok');
+
+  }catch(err){
+    sPort=null;
+    connected=false;
+    usbPortId=null;
+    const msg=(err&&err.message)?err.message:JSON.stringify(err);
+    toast('Connect failed: '+msg,'err');
+    sysLog('ERR connect: '+msg);
+  }
+}
+
+async function doDisconnect(){
+  doStop();stopPoll();
+  connected=false;
+  sPort=null;      // clear compat flag — sim-patch will see !sPort === true → correct
+  rxBuffer='';
+  const UsbSerial=getUsbSerial();
+  const portId=usbPortId;
+  usbPortId=null;
+
+  try{
+    if(usbDataListener){ await usbDataListener.remove(); usbDataListener=null; }
+    if(usbErrorListener){ await usbErrorListener.remove(); usbErrorListener=null; }
+    if(usbDetachListener){ await usbDetachListener.remove(); usbDetachListener=null; }
+    if(UsbSerial&&portId!=null){
+      await UsbSerial.stopReading({portId:portId});
+      await UsbSerial.close({portId:portId});
+    }
+  }catch(e){
+    // device may already be gone (yanked) or double-close — fine, UI cleanup below still runs
+  }
+  gState='—';updateMachBar();updateUI();
+  txt('ePI','No port');sysLog('Disconnected');toast('Disconnected');
+}
+
+// startReadLoop() removed — native 'data' event listener registered inline inside doConnect() above
+
+
+// ════════ INCOMING DATA ════════
+function handleRx(line){
+  const lo=line.toLowerCase();
+  // Status report — silent
+  if(line.startsWith('<')&&line.endsWith('>')){parseGrblStatus(line);return;}
+  // Feedback
+  if(line.startsWith('[')&&line.endsWith(']')){
+    // Parse $$ settings
+    const sm=line.match(/^\[(.+):(.+)\]$/);
+    if(sm){} // could store
+    rxLog(line);return;
+  }
+  // GRBL setting from $$ output
+  if(/^\$\d+=/.test(line)){parseGrblSetting(line);rxLog(line);return;}
+  // OK
+  if(lo==='ok'||/^ok[\s:]/.test(lo)){
+    sOk++;txt('eOk',sOk);
+    rxLog(line);
+    if(streamMode==='buffer'){
+      bufOnOk();
+    } else {
+      if(playing&&!paused&&waitingOk){waitingOk=false;scheduleNext();}
+    }
+    return;
+  }
+  // Error
+  if(/^error/.test(lo)){
+    sErr++;txt('eErr',sErr);
+    const code=parseInt(lo.split(':')[1]);
+    const desc=GRBL_ERR[code]?` — ${GRBL_ERR[code]}`:'';
+    errLog(line+desc);
+    showAlert(line+desc,'err');
+    const action=sel('errActionSel');
+    if(action==='stop'){toast('Error: '+line+desc,'err');doStop();}
+    else if(action==='skip'){toast('Skipped error: '+code,'warn');if(streamMode==='buffer'){bufOnOk();}else{if(playing&&!paused&&waitingOk){waitingOk=false;scheduleNext();}}}
+    else{toast('Error: '+line+desc,'err');doStop();}
+    return;
+  }
+  // Alarm
+  if(/^alarm/.test(lo)){
+    errLog('⚠ '+line);toast('ALARM: '+line,'err');
+    showAlert('ALARM: '+line+' — Use 🔓 Unlock ($X) to clear','warn');
+    gState='Alarm';updateMachBar();return;
+  }
+  // Grbl startup
+  if(/^grbl/i.test(line)){sysLog(line);return;}
+  rxLog(line);
+}
+
+// ════════ ALERT BANNER ════════
+function showAlert(msg,type){
+  const el=$('alertBanner');if(!el)return;
+  el.className='alert vis '+type;
+  el.textContent=msg;
+  setTimeout(()=>{el.classList.remove('vis');},8000);
+}
+
+// ════════ GRBL STATUS PARSER ════════
+function parseGrblStatus(raw){
+  const inner=raw.slice(1,-1);
+  if(inner.includes('|')){
+    const parts=inner.split('|');
+    gState=parts[0];
+    for(let i=1;i<parts.length;i++){
+      const p=parts[i];
+      if(p.startsWith('MPos:')){const[x,y,z]=p.slice(5).split(',').map(Number);mPos={x,y,z};}
+      else if(p.startsWith('WPos:')){const[x,y,z]=p.slice(5).split(',').map(Number);wPos={x,y,z};}
+      else if(p.startsWith('WCO:')){const[ox,oy,oz]=p.slice(4).split(',').map(Number);wPos={x:mPos.x-ox,y:mPos.y-oy,z:mPos.z-oz};}
+      else if(p.startsWith('Fs:')){const[f,s]=p.slice(3).split(',').map(Number);gFeed=f;gSpindle=s||0;}
+      else if(p.startsWith('F:')){gFeed=Number(p.slice(2));}
+      else if(p.startsWith('Ov:')){const[f,r,s]=p.slice(3).split(',').map(Number);gOvr={f,r,s};updateOvrSliders();}
+    }
+  }else{
+    const sm=inner.match(/^([A-Za-z]+)/);gState=sm?sm[1]:'?';
+    const mp=inner.match(/MPos:([-\d.]+),([-\d.]+),([-\d.]+)/);if(mp)mPos={x:+mp[1],y:+mp[2],z:+mp[3]};
+    const wp=inner.match(/WPos:([-\d.]+),([-\d.]+),([-\d.]+)/);if(wp)wPos={x:+wp[1],y:+wp[2],z:+wp[3]};
+    const ff=inner.match(/F:([-\d.]+)/);if(ff)gFeed=+ff[1];
+  }
+  updateMachBar();
+}
+
+function updateOvrSliders(){
+  sv('feedOvr',gOvr.f);txt('eFOvr',gOvr.f+'%');
+  sv('spindleOvr',gOvr.s);txt('eSOvr',gOvr.s+'%');
+  txt('eOvr',`F:${gOvr.f}% S:${gOvr.s}%`);
+}
+
+function parseGrblSetting(line){
+  const m=line.match(/^\$(\d+)=([\S]+)\s*(.*)?/);
+  if(!m) return;
+  grblSettingsMap[m[1]]={val:m[2],comment:m[3]||''};
+  renderGrblSettings();
+}
+
+function renderGrblSettings(){
+  const el=$('grblSettingsBody'); if(!el) return;
+  const entries=Object.entries(grblSettingsMap).sort((a,b)=>+a[0]-+b[0]);
+  if(!entries.length){el.innerHTML='<div class="cempty">No settings received</div>';return;}
+  el.innerHTML=entries.map(([id,{val,comment}])=>
+    `<div class="grbl-setting"><span class="gid">$${id}</span><span class="gval">${esc(val)}</span><span class="gcom">${esc(comment)}</span></div>`
+  ).join('');
+}
+
+function updateMachBar(){
+  const c=connected,f=v=>c?v.toFixed(3):'—';
+  const el=$('eState');
+  if(el){
+    el.textContent=gState;
+    const cols={Idle:'#39ff14',Run:'#00e5ff',Hold:'#ffd600',Alarm:'#ff2d55',Door:'#ff2d55',Home:'#b57bee',Check:'#ffd600',Sleep:'#456078','—':'#456078'};
+    el.style.color=cols[gState]||'#c5d8e8';
+  }
+  txt('eMX',f(mPos.x));txt('eMY',f(mPos.y));txt('eMZ',f(mPos.z));
+  txt('eWX',f(wPos.x));txt('eWY',f(wPos.y));txt('eWZ',f(wPos.z));
+  txt('eFeed',c?gFeed:'—');txt('eSpindle',c?gSpindle:'—');
+  txt('eOvr',c?`F:${gOvr.f}% S:${gOvr.s}%`:'F:—% S:—%');
+}
+
+// ════════ POLLING ════════
+function startPoll(){
+  stopPoll();if(!cb('pollCb'))return;
+  const ms=Math.max(200,num('pollMs',1000));
+  pollInt=setInterval(()=>{
+    if(connected&&sel('fwSel')==='grbl') rawBytes(new Uint8Array([0x3F]));
+  },ms);
+}
+function stopPoll(){if(pollInt){clearInterval(pollInt);pollInt=null;}}
+function onPollToggle(){if(connected){cb('pollCb')?startPoll():stopPoll();}}
+
+// ════════ WRITE HELPERS ════════
+function strToB64(s){
+  // G-code/Marlin/GRBL commands are ASCII, so a plain char-code map is safe for btoa
+  let bin='';
+  for(let i=0;i<s.length;i++) bin+=String.fromCharCode(s.charCodeAt(i)&0xFF);
+  return btoa(bin);
+}
+function bytesToB64(bytes){
+  let bin='';
+  for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function rawStr(cmd){
+  if(!connected||usbPortId==null) return Promise.resolve(false);
+  let out=cmd;
+  // Marlin checksum mode — preserved exactly as original
+  if(cb('checksumCb')&&sel('fwSel')==='marlin'){
+    const full=`N${lineCounter} ${cmd}`;
+    let cs=0;for(let i=0;i<full.length;i++) cs^=full.charCodeAt(i);
+    out=`${full}*${cs&0xFF}`;
+    lineCounter++;
+  }
+  const nl={LF:'\n',CR:'\r',CRLF:'\r\n',NONE:''}[sel('nlSel')]??'\n';
+  const UsbSerial=getUsbSerial();
+  if(!UsbSerial) return Promise.resolve(false);
+  return UsbSerial.write({portId:usbPortId,data:strToB64(out+nl)})
+    .then(function(){ return true; })
+    .catch(function(err){ sysLog('Write error: '+(err&&err.message?err.message:err)); return false; });
+}
+function rawBytes(b){
+  if(!connected||usbPortId==null) return Promise.resolve();
+  const UsbSerial=getUsbSerial();
+  if(!UsbSerial) return Promise.resolve();
+  return UsbSerial.write({portId:usbPortId,data:bytesToB64(b)})
+    .catch(function(err){ sysLog('WriteHex error: '+(err&&err.message?err.message:err)); });
+}
+
+// ════════ FILE LOADING ════════
+function handleDragOver(e){e.preventDefault();$('dzone').classList.add('over');}
+function handleDragLeave(){$('dzone').classList.remove('over');}
+function handleDrop(e){e.preventDefault();$('dzone').classList.remove('over');const f=e.dataTransfer.files[0];if(f)loadFile(f);}
+function onFileChange(inp){const f=inp.files[0];if(f)loadFile(f);}
+
+async function openFileNative(){
+  if(!window.showOpenFilePicker){toast('File System Access API not available in this browser','warn');return;}
+  try{
+    const[fh]=await window.showOpenFilePicker({types:[{description:'G-code',accept:{'text/plain':['.gcode','.nc','.ngc','.tap','.cnc','.g']}}]});
+    const file=await fh.getFile();loadFile(file);
+  }catch(e){if(e.name!=='AbortError') toast('Open failed: '+e.message,'err');}
+}
+
+function loadFile(file){
+  const r=new FileReader();
+  r.onload=e=>processFile(e.target.result,file.name,file.size);
+  r.onerror=()=>toast('Read error','err');
+  r.readAsText(file);
+}
+
+function processFile(text,name,size){
+  doStop();
+  rawLines=text.split('\n').map(l=>l.replace(/\r/g,'').trim());
+  lineMap=[];lmIdx=new Map();
+  for(let i=0;i<rawLines.length;i++){
+    if(stripCmt(rawLines[i]).length>0){lmIdx.set(i,lineMap.length);lineMap.push(i);}
+  }
+  jobIdx=0;donePct=0;lineCounter=0;
+  tp=parseTP(rawLines);tpB=calcBounds(tp);
+  cvSc=1;cvPan={x:0,y:0};
+  fileStats=analyzeGcode(rawLines);
+
+  $('dzone').style.display='none';
+  $('fInfo').classList.add('vis');
+  txt('eFName',name);
+  const _estT=fileStats?.estTime||0;
+  const _estStr=_estT>5?` · Est. ${fmt(_estT)}`:'';
+  txt('eFMet',`${rawLines.length} lines · ${lineMap.length} exec · ${tp.length} moves · ${(size/1024).toFixed(1)}KB${_estStr}`);
+  txt('eTotal',lineMap.length);
+
+  renderCodeView();
+  cvFit();
+  resetStats();
+  updateUI();
+  renderStatsPanel();
+  saveRecentFile(name,size,lineMap.length);
+  loadRecentFiles();
+  toast('Loaded: '+name,'ok');
+}
+
+function clearFile(){
+  doStop();rawLines=[];lineMap=[];lmIdx=new Map();jobIdx=0;
+  tp=[];tpB=null;donePct=0;fileStats=null;
+  $('dzone').style.display='';$('fInfo').classList.remove('vis');$('fInput').value='';
+  txt('eTotal','—');$('cScroll').innerHTML='<div class="cempty">No file loaded</div>';
+  txt('eLCnt','');renderCanvas();resetStats();updateUI();
+  $('statsBody').innerHTML='<div class="cempty">Load a file to see statistics</div>';
+}
+
+function resumeFromLine(){
+  const raw=prompt('Resume from line number:');
+  if(!raw) return;
+  const n=parseInt(raw);
+  if(isNaN(n)||n<1){toast('Invalid line number','warn');return;}
+  // Find jobIdx for lines >= n-1
+  const found=lineMap.findIndex(ri=>ri>=n-1);
+  if(found<0){toast('Line out of range','warn');return;}
+  jobIdx=found;donePct=jobIdx/Math.max(lineMap.length,1);
+  updateCodeLines();updateProg();renderCanvas();
+  sysLog(`↳ Resuming from line ${n} (job pos ${found})`);
+  toast(`Resume from line ${n}`,'ok');
+}
+
+function stripCmt(line){return line.replace(/;.*$/,'').replace(/\(.*?\)/g,'').trim();}
+
+// ════════ G-CODE ANALYSIS ════════
+function analyzeGcode(lines){
+  let x=0,y=0,z=0,abs=true,feed=1000;
+  let totDist=0,cutDist=0,rapDist=0,estSec=0,rapidSec=0;
+  let moves=0,rapids=0,minZ=Infinity,maxZ=-Infinity;
+  for(const raw of lines){
+    const line=raw.replace(/;.*$/,'').replace(/\(.*?\)/g,'').toUpperCase().replace(/\s+/g,'');
+    if(!line) continue;
+    if(/G90(?!\d)/.test(line))abs=true;if(/G91(?!\d)/.test(line))abs=false;
+    const co=c=>{const m=line.match(new RegExp(c+'([-+]?[0-9]*\\.?[0-9]+)'));return m?parseFloat(m[1]):null;};
+    const nf=co('F');if(nf)feed=nf;
+    const nx=co('X'),ny=co('Y'),nz=co('Z');
+    if(nx===null&&ny===null&&nz===null) continue;
+    const isR=/G0{0,2}(?!\d)/.test(line);
+    const isL=/G0*1(?!\d)/.test(line);
+    if(isR||isL){
+      const ex=abs?(nx??x):x+(nx??0);const ey=abs?(ny??y):y+(ny??0);const ez=abs?(nz??z):z+(nz??0);
+      const d=Math.sqrt((ex-x)**2+(ey-y)**2+(ez-z)**2);
+      totDist+=d;
+      if(isR){rapDist+=d;rapidSec+=d/(3000/60);}
+      else{cutDist+=d;estSec+=d/(feed/60);moves++;}
+      if(isL)rapids+=0; else rapids++;
+      if(nz!==null){minZ=Math.min(minZ,ez);maxZ=Math.max(maxZ,ez);}
+      x=ex;y=ey;z=ez;
+    }
+  }
+  return{totDist:totDist.toFixed(1),cutDist:cutDist.toFixed(1),rapDist:rapDist.toFixed(1),
+    estTime:Math.ceil(estSec+rapidSec),moves,rapids,
+    minZ:minZ===Infinity?0:minZ.toFixed(3),maxZ:maxZ===-Infinity?0:maxZ.toFixed(3)};
+}
+
+function renderStatsPanel(){
+  const el=$('statsBody'); if(!el) return;
+  if(!fileStats){el.innerHTML='<div class="cempty">No file loaded</div>';return;}
+  const s=fileStats;
+  el.innerHTML=`
+    <div class="stat-row-item"><span class="k">Total lines</span><span class="v c">${rawLines.length}</span></div>
+    <div class="stat-row-item"><span class="k">Exec commands</span><span class="v c">${lineMap.length}</span></div>
+    <div class="stat-row-item"><span class="k">Linear moves (G1)</span><span class="v g">${s.moves}</span></div>
+    <div class="stat-row-item"><span class="k">Total XY distance</span><span class="v">${s.totDist} mm</span></div>
+    <div class="stat-row-item"><span class="k">Cutting distance</span><span class="v g">${s.cutDist} mm</span></div>
+    <div class="stat-row-item"><span class="k">Rapid distance</span><span class="v">${s.rapDist} mm</span></div>
+    <div class="stat-row-item"><span class="k">Estimated job time</span><span class="v y">${fmt(s.estTime)} (${s.estTime}s)</span></div>
+    <div class="stat-row-item"><span class="k">Z range</span><span class="v">${s.minZ} → ${s.maxZ} mm</span></div>
+    <div class="stat-row-item"><span class="k">Toolpath moves</span><span class="v c">${tp.length}</span></div>`;
+}
+
+// ════════ TOOLPATH PARSER ════════
+function parseTP(lines){
+  const segs=[];let x=0,y=0,z=0,abs=true,lastT='rapid';
+  for(const raw of lines){
+    const line=raw.replace(/;.*$/,'').replace(/\(.*?\)/g,'').toUpperCase().replace(/\s+/g,'');
+    if(!line) continue;
+    if(/G90(?!\d)/.test(line))abs=true;
+    if(/G91(?!\d)/.test(line))abs=false;
+    const co=c=>{const m=line.match(new RegExp(c+'([-+]?[0-9]*\\.?[0-9]+)'));return m?parseFloat(m[1]):null;};
+    const nx=co('X'),ny=co('Y'),nz=co('Z');
+    const ni=co('I'),nj=co('J'); // arc center offsets — always relative to start pos
+    const nr=co('R');            // arc radius word (alternative to I/J)
+    // Detect modal G-code
+    const isG0=/G0{0,2}(?!\d)/.test(line);
+    const isG1=/G0*1(?!\d)/.test(line);
+    const isG2=/G0*2(?!\d)/.test(line);
+    const isG3=/G0*3(?!\d)/.test(line);
+    let mt=null;
+    if(isG0)mt='rapid'; else if(isG1)mt='linear';
+    else if(isG2)mt='arc_cw'; else if(isG3)mt='arc_ccw';
+    else mt=lastT;
+    // Arc type must be explicit — don't inherit modally without arc data
+    if((mt==='arc_cw'||mt==='arc_ccw')&&!isG2&&!isG3) mt='linear';
+    const ex=abs?(nx??x):x+(nx??0);
+    const ey=abs?(ny??y):y+(ny??0);
+    const ez=abs?(nz??z):z+(nz??0);
+    if(mt==='arc_cw'||mt==='arc_ccw'){
+      const ccw=(mt==='arc_ccw');
+      if(ni!==null||nj!==null){
+        // ── I/J mode ─────────────────────────────────────────────────
+        const icx=x+(ni??0), icy=y+(nj??0);
+        const r=Math.sqrt((x-icx)**2+(y-icy)**2);
+        if(r>1e-6){
+          const sa=Math.atan2(y-icy,x-icx);
+          const ea=Math.atan2(ey-icy,ex-icx);
+          const fullCircle=Math.abs(ex-x)<1e-4&&Math.abs(ey-y)<1e-4&&r>1e-4;
+          segs.push({t:'arc',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez,cx:icx,cy:icy,r,sa,ea,ccw,fullCircle});
+        }
+      } else if(nr!==null){
+        // ── R-word mode ───────────────────────────────────────────────
+        const R=Math.abs(nr);
+        const dx=ex-x, dy=ey-y, d=Math.sqrt(dx*dx+dy*dy);
+        if(d>1e-6&&d<=2*R+1e-6){
+          const mx2=(x+ex)/2, my2=(y+ey)/2;
+          const h=Math.sqrt(Math.max(0,R*R-(d/2)**2));
+          const px=-dy/d, py=dx/d; // unit perpendicular
+          // R>0 = minor arc; R<0 = major arc. Center side depends on direction.
+          const sign=(ccw!==(nr<0))?1:-1;
+          const icx=mx2+sign*h*px, icy=my2+sign*h*py;
+          const sa=Math.atan2(y-icy,x-icx);
+          const ea=Math.atan2(ey-icy,ex-icx);
+          segs.push({t:'arc',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez,cx:icx,cy:icy,r:R,sa,ea,ccw,fullCircle:false});
+        } else if(ex!==x||ey!==y||ez!==z){
+          segs.push({t:'linear',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez}); // degenerate — fallback
+        }
+      } else if(ex!==x||ey!==y||ez!==z){
+        segs.push({t:'linear',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez}); // arc with no offset — fallback
+      }
+    } else if(ex!==x||ey!==y||ez!==z){
+      segs.push({t:mt,x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez});
+    }
+    x=ex;y=ey;z=ez;
+    if(isG0)lastT='rapid'; else if(isG1)lastT='linear';
+    else if(isG2||isG3)lastT=mt; // preserve arc modal
+  }
+  return segs;
+}
+
+// ── Does the arc from sa→ea (ccw) pass through 'angle'? ──────────────────
+function arcSpansAngle(sa,ea,angle,ccw){
+  const TAU=Math.PI*2;
+  const n=a=>((a%TAU)+TAU)%TAU;
+  const na=n(angle),nsa=n(sa),nea=n(ea);
+  if(Math.abs(nsa-nea)<1e-6) return true; // full circle
+  if(ccw){return nea>=nsa?na>=nsa&&na<=nea:na>=nsa||na<=nea;}
+  else    {return nsa>=nea?na<=nsa&&na>=nea:na<=nsa||na>=nea;}
+}
+
+function calcBounds(segs){
+  if(!segs.length) return null;
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity,mnZ=Infinity,mxZ=-Infinity;
+  for(const s of segs){
+    mnX=Math.min(mnX,s.x1,s.x2);mxX=Math.max(mxX,s.x1,s.x2);
+    mnY=Math.min(mnY,s.y1,s.y2);mxY=Math.max(mxY,s.y1,s.y2);
+    mnZ=Math.min(mnZ,s.z1,s.z2);mxZ=Math.max(mxZ,s.z1,s.z2);
+    if(s.t==='arc'){
+      const{cx,cy,r,sa,ea,ccw,fullCircle}=s;
+      if(fullCircle){
+        mnX=Math.min(mnX,cx-r);mxX=Math.max(mxX,cx+r);
+        mnY=Math.min(mnY,cy-r);mxY=Math.max(mxY,cy+r);
+      } else {
+        // Check the four cardinal extremes: E(0°) N(90°) W(180°) S(270°)
+        const cards=[[0,cx+r,cy],[Math.PI/2,cx,cy+r],[Math.PI,cx-r,cy],[3*Math.PI/2,cx,cy-r]];
+        for(const[ca,px,py] of cards){
+          if(arcSpansAngle(sa,ea,ca,ccw)){
+            mnX=Math.min(mnX,px);mxX=Math.max(mxX,px);
+            mnY=Math.min(mnY,py);mxY=Math.max(mxY,py);
+          }
+        }
+      }
+    }
+  }
+  return{mnX,mxX,mnY,mxY,mnZ,mxZ};
+}
+
+// ════════ CANVAS ════════
+function initCanvas(){
+  const cv=$('cvs'),wrap=$('cvWrap');if(!cv||!wrap)return;
+  const resize=()=>{cv.width=wrap.clientWidth||400;cv.height=wrap.clientHeight||300;renderCanvas();};
+  new ResizeObserver(resize).observe(wrap);resize();
+  let drag=false,ox=0,oy=0,sx=0,sy=0;
+  cv.addEventListener('mousedown',e=>{drag=true;sx=e.clientX;sy=e.clientY;ox=cvPan.x;oy=cvPan.y;cv.style.cursor='grabbing';});
+  document.addEventListener('mousemove',e=>{if(!drag)return;cvPan.x=ox+(e.clientX-sx);cvPan.y=oy+(e.clientY-sy);renderCanvas();});
+  document.addEventListener('mouseup',()=>{drag=false;cv.style.cursor='grab';});
+  let tp0=null;
+  cv.addEventListener('touchstart',e=>{if(e.touches.length===1)tp0={x:e.touches[0].clientX,y:e.touches[0].clientY,px:cvPan.x,py:cvPan.y};},{passive:true});
+  cv.addEventListener('touchmove',e=>{if(!tp0||e.touches.length!==1)return;cvPan.x=tp0.px+(e.touches[0].clientX-tp0.x);cvPan.y=tp0.py+(e.touches[0].clientY-tp0.y);renderCanvas();},{passive:true});
+  cv.addEventListener('touchend',()=>{tp0=null;});
+  cv.addEventListener('wheel',e=>{e.preventDefault();cvSc*=e.deltaY>0?0.88:1.14;cvSc=Math.max(0.02,Math.min(200,cvSc));renderCanvas();},{passive:false});
+}
+
+function cvFit(){cvSc=1;cvPan={x:0,y:0};renderCanvas();}
+function cvZoom(f){cvSc=Math.max(0.02,Math.min(200,cvSc*f));renderCanvas();}
+function toggle3D(){view3D=!view3D;$('btn3D').style.color=view3D?'var(--cyan)':'';renderCanvas();}
+function toggleWorkspace(){
+  showWorkspace=!showWorkspace;
+  const b=$('btnWS');
+  if(b) b.style.color=showWorkspace?'var(--yellow)':'';
+  renderCanvas();
+}
+
+function renderCanvas(){
+  const cv=$('cvs');if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#050a0e';ctx.fillRect(0,0,W,H);
+  if(!tp.length){
+    ctx.fillStyle='#182840';ctx.font='11px JetBrains Mono,monospace';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('No toolpath — load a .gcode file',W/2,H/2);
+    txt('eCvI','');return;
+  }
+  const b=tpB;
+  const pad=28;
+  const rX=(b.mxX-b.mnX)||1,rY=(b.mxY-b.mnY)||1,rZ=(b.mxZ-b.mnZ)||1;
+  const fitSc=Math.min((W-pad*2)/rX,(H-pad*2)/rY);
+  const sc=fitSc*cvSc;
+  const midX=(b.mnX+b.mxX)/2,midY=(b.mnY+b.mxY)/2,midZ=(b.mnZ+b.mxZ)/2;
+  const cx=W/2+cvPan.x,cy=H/2+cvPan.y;
+
+  // Projection functions
+  const to2D=(wx,wy)=>({x:cx+(wx-midX)*sc,y:cy-(wy-midY)*sc});
+  // Isometric 3D projection
+  const toIso=(wx,wy,wz)=>{
+    const ix=(wx-midX)*sc,iy=(wy-midY)*sc,iz=(wz-midZ)*sc;
+    const angle=Math.PI/6;
+    return{x:cx+(ix-iy)*Math.cos(angle),y:cy-(ix+iy)*Math.sin(angle)+iz*0.8};
+  };
+  const toC=view3D?(wx,wy,wz)=>toIso(wx,wy,wz??0):(wx,wy)=>to2D(wx,wy);
+
+  // Grid
+  if(!view3D){
+    const gs=niceGrid(80/sc);
+    ctx.strokeStyle='rgba(0,229,255,0.03)';ctx.lineWidth=0.5;ctx.setLineDash([]);
+    for(let gx=Math.ceil(b.mnX/gs)*gs;gx<=b.mxX+gs;gx+=gs){const p=toC(gx,0);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,H);ctx.stroke();}
+    for(let gy=Math.ceil(b.mnY/gs)*gs;gy<=b.mxY+gs;gy+=gs){const p=toC(0,gy);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(W,p.y);ctx.stroke();}
+    const org=toC(0,0);ctx.strokeStyle='rgba(0,229,255,0.14)';ctx.lineWidth=0.7;ctx.setLineDash([5,6]);
+    ctx.beginPath();ctx.moveTo(org.x,0);ctx.lineTo(org.x,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,org.y);ctx.lineTo(W,org.y);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Workspace boundary overlay ─────────────────────────────────────────
+  if(showWorkspace&&!view3D){
+    const aX=num('sAreaX',200),aY=num('sAreaY',200);
+    if(aX>0&&aY>0){
+      const bl=to2D(0,0),tr=to2D(aX,aY);
+      // Dashed rect
+      ctx.strokeStyle='rgba(255,214,0,0.38)';ctx.lineWidth=1;ctx.setLineDash([7,5]);
+      ctx.strokeRect(bl.x,tr.y,tr.x-bl.x,bl.y-tr.y);
+      ctx.setLineDash([]);
+      // Corner tick marks + dots
+      const corners=[[0,0,bl],[aX,0,to2D(aX,0)],[0,aY,tr],[aX,aY,to2D(aX,aY)]];
+      const tSz=6;
+      corners.forEach(([wx,wy,p])=>{
+        ctx.fillStyle='rgba(255,214,0,0.75)';
+        ctx.beginPath();ctx.arc(p.x,p.y,2.5,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(255,214,0,0.5)';ctx.lineWidth=1;
+        const sx=wx===0?1:-1,sy=wy===0?1:-1;
+        ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+sx*tSz,p.y);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x,p.y-sy*tSz);ctx.stroke();
+      });
+      // Labels
+      ctx.font='8px JetBrains Mono,monospace';
+      ctx.fillStyle='rgba(255,214,0,0.55)';
+      ctx.textAlign='left';ctx.textBaseline='bottom';
+      ctx.fillText('0,0',bl.x+6,bl.y-5);
+      ctx.textAlign='right';ctx.textBaseline='top';
+      ctx.fillText(`${aX}×${aY}mm`,tr.x-6,tr.y+5);
+    }
+  }
+
+  const doneN=Math.floor(donePct*tp.length);
+
+  for(let i=0;i<tp.length;i++){
+    const s=tp[i];
+    const done=i<doneN,isCur=i===doneN;
+    ctx.beginPath();
+
+    if(s.t==='arc'){
+      // ── Arc: project center, negate angles for canvas Y-flip ──────────
+      // to2D maps Y: canvas_y = cy_origin - (wy-midY)*sc, so Y is visually up
+      // canvas_angle = -machine_angle (Y negation flips angle sign)
+      // Direction: G2 CW machine → ctx.arc anticlockwise=true (looks CW with Y-up)
+      //            G3 CCW machine → ctx.arc anticlockwise=false (looks CCW with Y-up)
+      // → anticlockwise = !s.ccw
+      const ac=to2D(s.cx,s.cy);
+      const cr=s.r*sc;
+      if(s.fullCircle||cr<0.5){
+        ctx.arc(ac.x,ac.y,Math.max(cr,0.5),0,Math.PI*2);
+      } else {
+        ctx.arc(ac.x,ac.y,cr,-s.sa,-s.ea,!s.ccw);
+      }
+    } else {
+      const p1=toC(s.x1,s.y1,s.z1),p2=toC(s.x2,s.y2,s.z2);
+      ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);
+    }
+
+    if(s.t==='rapid'){
+      ctx.strokeStyle=done?'rgba(255,107,53,0.07)':'rgba(255,107,53,0.5)';
+      ctx.setLineDash([3,5]);ctx.lineWidth=0.9;
+    } else {
+      let col;
+      if(view3D&&rZ>0.1){
+        const t=(s.z2-b.mnZ)/rZ;
+        const r=Math.round(255*(1-t));const g=Math.round(229*t);
+        col=done?`rgba(${r},${g},255,0.12)`:`rgb(${r},${g},${255})`;
+      } else {
+        col=done?'rgba(0,229,255,0.1)':(isCur?'#ffffff':'rgba(0,229,255,0.88)');
+      }
+      ctx.strokeStyle=col;ctx.setLineDash([]);ctx.lineWidth=isCur?2:1.2;
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Current position marker
+  if(doneN>0&&doneN<=tp.length){
+    const last=tp[doneN-1];
+    const pos=toC(last.x2,last.y2,last.z2);
+    ctx.strokeStyle='rgba(255,107,53,0.85)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(pos.x-9,pos.y);ctx.lineTo(pos.x+9,pos.y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pos.x,pos.y-9);ctx.lineTo(pos.x,pos.y+9);ctx.stroke();
+    ctx.fillStyle='rgba(255,107,53,0.45)';
+    ctx.beginPath();ctx.arc(pos.x,pos.y,4,0,Math.PI*2);ctx.fill();
+  }
+
+  ctx.fillStyle='rgba(0,229,255,0.38)';ctx.font='9px JetBrains Mono,monospace';
+  ctx.textAlign='left';ctx.textBaseline='bottom';
+  const arcCount=tp.filter(s=>s.t==='arc').length;
+  ctx.fillText(`${rX.toFixed(1)}×${rY.toFixed(1)}mm${view3D?` Z:${(b.mnZ).toFixed(1)}→${(b.mxZ).toFixed(1)}`:''}`,pad,H-5);
+  txt('eCvI',`${tp.length} mvs${arcCount?` · ${arcCount} arcs`:''} · ${Math.round(cvSc*100)}% ${view3D?'3D':'2D'}`);
+}
+
+function niceGrid(t){
+  const s=[0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500];
+  return s.reduce((a,b)=>Math.abs(b-t)<Math.abs(a-t)?b:a,s[0]);
+}
+
+// ════════ CODE VIEWER ════════
+function filterCode(v){cFilter=v.toLowerCase();renderCodeView();}
+
+function renderCodeView(){
+  const scroll=$('cScroll');if(!scroll)return;
+  const frag=document.createDocumentFragment();let count=0;
+  for(let i=0;i<rawLines.length;i++){
+    const line=rawLines[i];
+    if(cFilter&&!line.toLowerCase().includes(cFilter))continue;
+    count++;
+    const jp=lmIdx.has(i)?lmIdx.get(i):-1;
+    const exec=jp!==-1,done=exec&&jp<jobIdx,cur=exec&&jp===jobIdx&&playing;
+    const div=document.createElement('div');
+    div.className='cl'+(done?' done':'')+(cur?' cur':'')+((!exec)?' skip':'');
+    div.dataset.i=i;
+    div.innerHTML=`<span class="ln">${i+1}</span><span class="lc">${hlGc(line)}</span>`;
+    frag.appendChild(div);
+  }
+  scroll.innerHTML='';scroll.appendChild(frag);txt('eLCnt',count+' lines');
+}
+
+function updateCodeLines(){
+  const scroll=$('cScroll');if(!scroll)return;
+  scroll.querySelectorAll('.cl').forEach(el=>{
+    const i=parseInt(el.dataset.i),jp=lmIdx.has(i)?lmIdx.get(i):-1,exec=jp!==-1;
+    el.className='cl'+(exec&&jp<jobIdx?' done':'')+(exec&&jp===jobIdx&&playing?' cur':'')+((!exec)?' skip':'');
+  });
+  if(cb('autoScr')){const cur=scroll.querySelector('.cl.cur');if(cur)scroll.scrollTo({top:Math.max(0,cur.offsetTop-scroll.clientHeight/2),behavior:'smooth'});}
+}
+
+function hlGc(raw){
+  if(!raw)return'';
+  const e=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const t=raw.trimStart();
+  if(t.startsWith(';')||t.startsWith('('))return`<span class="cm">${e(raw)}</span>`;
+  let code=raw,cmt='';const ci=raw.indexOf(';');if(ci!==-1){code=raw.slice(0,ci);cmt=raw.slice(ci);}
+  const toks=code.trim().split(/\s+/).map(tok=>{
+    const m=tok.match(/^([A-Za-z]+)([-+\d.]*)?(.*)$/);if(!m)return e(tok);
+    const[,L,n,rest]=m,letter=L.toUpperCase();let cls='';
+    if(letter==='G'){const v=parseFloat(n||'0');if(v===0)cls='g0';else if(v===1)cls='g1';else if(v===2||v===3)cls='g23';else if(v===28||v===30||v===92)cls='gh';else cls='gx';}
+    else if(letter==='M'){const mv=parseFloat(n||'0');if(mv===3)cls='gm3';else if(mv===5)cls='gm5';else cls='gm';}
+    else if('XYZABCUVW'.includes(letter))cls='gp';
+    else if(letter==='E')cls='ge';
+    else if(letter==='F'||letter==='S')cls='gp';
+    else cls='gx';
+    const np=n?`<span class="gn">${e(n)}</span>`:'';
+    return`<span class="${cls}">${e(L)}</span>${np}${e(rest||'')}`;
+  });
+  return toks.join(' ')+(cmt?` <span class="cm">${e(cmt)}</span>`:'');
+}
+
+// ════════ BUFFER STREAMING (GRBL 1.1) ════════
+function bufReset(){grblBufQueue=[];grblBufUsed=0;}
+
+async function bufFill(){
+  if(!playing||paused) return;
+  GRBL_BUF=num('bufSize',127);
+  const batch=[];
+  while(jobIdx<lineMap.length){
+    const rawIdx=lineMap[jobIdx];
+    const cmd=stripCmt(rawLines[rawIdx]);
+    if(!cmd){jobIdx++;continue;}
+    const len=cmd.length+1;
+    if(grblBufUsed+len>GRBL_BUF) break;
+    batch.push({cmd,len});
+    grblBufQueue.push(len);
+    grblBufUsed+=len;
+    jobIdx++;
+  }
+  if(!batch.length&&grblBufQueue.length===0&&jobIdx>=lineMap.length){finishJob();return;}
+  for(const{cmd}of batch){
+    try{
+      await rawStr(cmd);
+      sSent++;txt('eSent',sSent);txLog(cmd);
+    }catch(e){errLog('Write failed: '+e.message);toast('Write error','err');doStop();return;}
+  }
+  updateCodeLines();updateProg();
+  donePct=jobIdx/Math.max(lineMap.length,1);
+  if(sSent%6===0)renderCanvas();
+}
+
+function bufOnOk(){
+  sOk++;txt('eOk',sOk);
+  if(grblBufQueue.length>0){
+    const len=grblBufQueue.shift();
+    grblBufUsed=Math.max(0,grblBufUsed-len);
+  }
+  if(playing&&!paused) bufFill();
+}
+
+// ════════ SYNC STREAMING ════════
+function scheduleNext(){
+  if(!playing||paused)return;
+  const d=num('lineDelay',0);
+  if(d>0)sendTimer=setTimeout(sendNext,d);else sendNext();
+}
+
+async function sendNext(){
+  if(!playing||paused)return;
+  if(jobIdx>=lineMap.length){finishJob();return;}
+  const rawIdx=lineMap[jobIdx];
+  const cmd=stripCmt(rawLines[rawIdx]);
+  if(!cmd){jobIdx++;updateCodeLines();updateProg();scheduleNext();return;}
+  try{
+    await rawStr(cmd);
+    sSent++;txt('eSent',sSent);txLog(cmd);
+    updateCodeLines();jobIdx++;updateProg();
+    donePct=jobIdx/Math.max(lineMap.length,1);
+    if(sSent%6===0)renderCanvas();
+  }catch(e){errLog('Write failed: '+e.message);toast('Write error','err');doStop();return;}
+  if(cb('waitOk')){waitingOk=true;}else{scheduleNext();}
+}
+
+// ════════ PLAYBACK ════════
+function doPlay(){
+  if(!connected){toast('Connect first','warn');return;}
+  if(!rawLines.length){toast('No file loaded','warn');return;}
+  if(playing)return;
+  playing=true;paused=false;
+  sSent=0;sOk=0;sErr=0;txt('eSent','0');txt('eOk','0');txt('eErr','0');
+  tStart=Date.now();elapInt=setInterval(tickElap,500);
+  $('pF').classList.remove('idle');
+  updateUI();
+  requestWakeLock();
+  if(streamMode==='buffer'){bufReset();bufFill();}else{scheduleNext();}
+}
+
+function doPause(){
+  if(!playing)return;
+  paused=!paused;
+  if(paused){
+    if(sendTimer){clearTimeout(sendTimer);sendTimer=null;}
+    waitingOk=false;
+    sysLog('⏸ Paused at line '+(jobIdx+1));
+    if(sel('fwSel')==='grbl')rawBytes(new Uint8Array([0x21]));
+  }else{
+    sysLog('▶ Resumed');
+    if(sel('fwSel')==='grbl')rawBytes(new Uint8Array([0x7E]));
+    if(streamMode==='buffer')bufFill();else scheduleNext();
+  }
+  txt('btnPause',paused?'▶ Resume':'⏸ Pause');
+  updateUI();
+}
+
+function doStop(){
+  if(sendTimer){clearTimeout(sendTimer);sendTimer=null;}
+  waitingOk=false;bufReset();playing=false;paused=false;
+  if(elapInt){clearInterval(elapInt);elapInt=null;}
+  $('pF')?.classList.add('idle');
+  if(rawLines.length)sysLog(`■ Stopped at line ${jobIdx+1} / ${lineMap.length}`);
+  releaseWakeLock();
+  updateUI();
+}
+
+function doRewind(){
+  doStop();jobIdx=0;donePct=0;lineCounter=0;
+  renderCodeView();renderCanvas();updateProg();resetStats();
+  sysLog('⏮ Rewound');
+}
+
+async function doStep(){
+  if(!connected){toast('Not connected','warn');return;}
+  if(!rawLines.length){toast('No file loaded','warn');return;}
+  if(jobIdx>=lineMap.length){toast('End of file','warn');return;}
+  if(playing&&!paused)return;
+  playing=true;paused=false;
+  if(!tStart){tStart=Date.now();elapInt=setInterval(tickElap,500);}
+  updateUI();
+  while(jobIdx<lineMap.length){
+    const rawIdx=lineMap[jobIdx],cmd=stripCmt(rawLines[rawIdx]);
+    if(!cmd){jobIdx++;continue;}
+    try{
+      await rawStr(cmd);sSent++;txt('eSent',sSent);txLog(cmd);
+      jobIdx++;updateCodeLines();updateProg();
+      donePct=jobIdx/Math.max(lineMap.length,1);renderCanvas();
+    }catch(e){errLog('Step error: '+e.message);}
+    break;
+  }
+  playing=false;updateUI();
+}
+
+function finishJob(){
+  doStop();donePct=1;renderCanvas();
+  $('pF').style.width='100%';txt('ePP','100%');
+  txt('ePL',`Line ${jobIdx} / ${lineMap.length}`);
+  sysLog(`✓ Job complete — ${sSent} sent · ${sOk} OK`);
+  toast('✓ Job complete!','ok');
+  sendNotification('G·FLOW — Job Complete',`${sSent} commands sent in ${fmt(Math.floor((Date.now()-tStart)/1000))}`);
+  if(cb('soundCb'))playBeep();
+  if(navigator.vibrate)navigator.vibrate([200,100,200]);
+}
+
+function resetStats(){
+  sSent=0;sOk=0;sErr=0;
+  txt('eSent','0');txt('eOk','0');txt('eErr','0');txt('eElap','0:00');txt('eEta','—');
+  $('pF').style.width='0%';$('pF')?.classList.add('idle');txt('ePP','0%');txt('ePL','Line 0 / 0');
+  if(elapInt){clearInterval(elapInt);elapInt=null;}tStart=null;
+}
+
+function updateProg(){
+  const total=lineMap.length;if(!total)return;
+  const pct=Math.round((jobIdx/total)*100);
+  $('pF').style.width=pct+'%';txt('ePP',pct+'%');txt('ePL',`Line ${jobIdx} / ${total}`);
+  if(tStart&&sSent>3){const e=(Date.now()-tStart)/1000;const r=sSent/e;txt('eEta',fmt(Math.ceil((total-jobIdx)/r)));}
+}
+
+function tickElap(){if(!tStart)return;txt('eElap',fmt(Math.floor((Date.now()-tStart)/1000)));}
+
+// ════════ GRBL QUICK COMMANDS ════════
+async function grblFeedHold()    {await rawBytes(new Uint8Array([0x21]));sysLog('→ Feed Hold (!)');}
+async function grblCycleStart()  {await rawBytes(new Uint8Array([0x7E]));sysLog('→ Cycle Start (~)');}
+async function grblSoftReset()   {await rawBytes(new Uint8Array([0x18]));sysLog('→ Soft Reset');if(playing)doStop();}
+async function grblUnlock()      {await rawStr('$X');sysLog('→ Unlock ($X)');}
+async function grblHome()        {await rawStr('$H');sysLog('→ Home ($H)');}
+async function grblGcState()     {await rawStr('$G');sysLog('→ $G');}
+async function grblViewSettings(){grblSettingsMap={};await rawStr('$$');sysLog('→ $$');}
+async function grblZeroWork()    {await rawStr('G10 P0 L20 X0 Y0 Z0');sysLog('→ Zero WCS');}
+async function grblCheckMode()   {await rawStr('$C');sysLog('→ $C');}
+
+// ════════ OVERRIDES ════════
+const FEED_OVR={plus10:0x91,minus10:0x92,plus1:0x93,minus1:0x94,reset:0x90};
+const RAPID_OVR={full:0x95,half:0x96,quarter:0x97};
+const SPINDLE_OVR={plus10:0x9A,minus10:0x9B,plus1:0x9C,minus1:0x9D,reset:0x99};
+
+async function sendFeedOvr(a)   {await rawBytes(new Uint8Array([FEED_OVR[a]]));sysLog(`→ Feed OVR: ${a}`);}
+async function sendRapidOvr(a)  {await rawBytes(new Uint8Array([RAPID_OVR[a]]));sysLog(`→ Rapid OVR: ${a}`);}
+async function sendSpindleOvr(a){await rawBytes(new Uint8Array([SPINDLE_OVR[a]]));sysLog(`→ Spindle OVR: ${a}`);}
+
+function onFeedOvrSlider(v){
+  txt('eFOvr',v+'%');
+  // Snap to 100% for reset
+  if(Math.abs(v-100)<5){sv('feedOvr',100);txt('eFOvr','100%');rawBytes(new Uint8Array([FEED_OVR.reset]));}
+}
+function onSpindleOvrSlider(v){
+  txt('eSOvr',v+'%');
+  if(Math.abs(v-100)<5){sv('spindleOvr',100);txt('eSOvr','100%');rawBytes(new Uint8Array([SPINDLE_OVR.reset]));}
+}
+
+// ════════ JOG ════════
+function setJogStep(s){
+  jogStep=s;
+  document.querySelectorAll('.step-btn').forEach(b=>{b.classList.toggle('active',parseFloat(b.textContent)===s);});
+}
+
+async function jog(axis,dir){
+  if(!connected)return;
+  const dist=dir*jogStep;
+  const feed=num('jogFeed',500);
+  const cmd=`$J=G91 G21 ${axis}${dist>0?'+':''}${dist.toFixed(3)} F${feed}`;
+  await rawStr(cmd);
+  sysLog(`Jog ${axis}${dist>0?'+':''}${dist}mm @ F${feed}`);
+}
+
+async function jogCancel(){
+  if(!connected)return;
+  await rawBytes(new Uint8Array([0x85]));
+  sysLog('→ Jog Cancel');
+}
+
+async function jogGoHome(){
+  if(!connected)return;
+  await rawStr('G90 G0 X0 Y0');sysLog('→ Go Work Zero (XY)');
+}
+
+// ════════ MACROS ════════
+const DEFAULT_MACROS=[
+  {name:'Home All',cmd:'$H',color:'purple'},
+  {name:'Unlock',cmd:'$X',color:'yellow'},
+  {name:'Zero WCS',cmd:'G10 P0 L20 X0 Y0 Z0',color:'green'},
+  {name:'Zero X',cmd:'G10 P0 L20 X0',color:'ghost'},
+  {name:'Zero Y',cmd:'G10 P0 L20 Y0',color:'ghost'},
+  {name:'Zero Z',cmd:'G10 P0 L20 Z0',color:'ghost'},
+  {name:'Go Origin',cmd:'G90 G0 X0 Y0',color:'cyan'},
+  {name:'Spindle ON',cmd:'M3 S12000',color:'orange'},
+  {name:'Spindle OFF',cmd:'M5',color:'red'},
+  {name:'Check Mode',cmd:'$C',color:'ghost'},
+  {name:'Get Settings',cmd:'$$',color:'ghost'},
+  {name:'GCode State',cmd:'$G',color:'ghost'},
+];
+
+function loadMacros(){
+  try{const s=JSON.parse(localStorage.getItem('gflow_macros')||'[]');if(s.length)macros=s;else macros=[...DEFAULT_MACROS];}
+  catch(_){macros=[...DEFAULT_MACROS];}
+}
+function saveMacros(){try{localStorage.setItem('gflow_macros',JSON.stringify(macros));}catch(_){}}
+function resetMacros(){macros=[...DEFAULT_MACROS];saveMacros();renderMacros();}
+
+function renderMacros(){
+  const grid=$('macroGrid');if(!grid)return;
+  grid.innerHTML=macros.map((m,i)=>`
+    <div class="macro-btn" onclick="runMacro(${i})" style="border-color:${mColor(m.color)}40;color:${mColor(m.color)}">
+      <button class="macro-edit" onclick="event.stopPropagation();openMacroModal(${i})" title="Edit">✏</button>
+      <span class="macro-name">${esc(m.name)}</span>
+      <span class="macro-cmd">${esc(m.cmd.slice(0,20)+(m.cmd.length>20?'…':''))}</span>
+    </div>`).join('');
+}
+
+function mColor(c){return{cyan:'#00e5ff',green:'#39ff14',yellow:'#ffd600',orange:'#ff6b35',red:'#ff2d55',purple:'#b57bee',ghost:'#456078'}[c]||'#456078';}
+
+async function runMacro(i){
+  if(!connected){toast('Not connected','warn');return;}
+  const cmds=macros[i].cmd.split(';').map(s=>s.trim()).filter(Boolean);
+  for(const cmd of cmds){await rawStr(cmd);txLog(cmd);}
+  sysLog(`Macro: ${macros[i].name}`);
+}
+
+function openMacroModal(i){
+  editingMacroIdx=i;editingMacroColor=macros[i].color||'ghost';
+  sv('meName',macros[i].name);sv('meCmd',macros[i].cmd);
+  $('macroModal').style.display='flex';
+}
+function closeMacroModal(){$('macroModal').style.display='none';}
+function setMC(c){editingMacroColor=c;}
+function saveMacroEdit(){
+  if(editingMacroIdx<0)return;
+  macros[editingMacroIdx]={name:$('meName').value||'Macro',cmd:$('meCmd').value||'',color:editingMacroColor};
+  saveMacros();renderMacros();closeMacroModal();
+}
+
+// ════════ MANUAL COMMAND ════════
+async function doManualSend(){
+  const inp=$('mInp'),cmd=inp?.value.trim();
+  if(!cmd||!connected)return;
+  await rawStr(cmd);txLog(cmd);
+  hist.unshift(cmd);if(hist.length>100)hist.pop();histIdx=-1;inp.value='';
+  addToMacroLog(cmd);
+}
+async function doManualSend2(){
+  const inp=$('mInp2'),cmd=inp?.value.trim();
+  if(!cmd||!connected)return;
+  await rawStr(cmd);txLog(cmd);
+  hist2.unshift(cmd);if(hist2.length>100)hist2.pop();histIdx2=-1;inp.value='';
+}
+function onManualKey(e){
+  const inp=$('mInp');
+  if(e.key==='Enter'){doManualSend();return;}
+  if(e.key==='ArrowUp'){e.preventDefault();histIdx=Math.min(histIdx+1,hist.length-1);inp.value=hist[histIdx]||'';}
+  if(e.key==='ArrowDown'){e.preventDefault();histIdx=Math.max(histIdx-1,-1);inp.value=histIdx===-1?'':(hist[histIdx]||'');}
+}
+function onManualKey2(e){
+  const inp=$('mInp2');
+  if(e.key==='Enter'){doManualSend2();return;}
+  if(e.key==='ArrowUp'){e.preventDefault();histIdx2=Math.min(histIdx2+1,hist2.length-1);inp.value=hist2[histIdx2]||'';}
+  if(e.key==='ArrowDown'){e.preventDefault();histIdx2=Math.max(histIdx2-1,-1);inp.value=histIdx2===-1?'':(hist2[histIdx2]||'');}
+}
+
+function addToMacroLog(line){
+  const el=$('macroLog');if(!el)return;
+  const d=document.createElement('div');
+  d.style.cssText='font-family:JetBrains Mono,monospace;font-size:.7rem;color:rgba(0,229,255,.6);padding:2px 0';
+  d.textContent='> '+line;
+  el.appendChild(d);
+  while(el.children.length>200)el.removeChild(el.firstChild);
+  el.scrollTop=el.scrollHeight;
+}
+
+// ════════ CONSOLE LOG ════════
+function addLog(dir,msg){
+  if(cb('pauseLog'))return;
+  if(cb('rxOnly')&&dir!=='rx')return;
+  const el=$('conLog');if(!el)return;
+  const now=new Date();
+  const ts=`${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`;
+  const d=document.createElement('div');
+  d.className='ll '+dir;
+  d.innerHTML=`<span class="lts">${ts}</span><span class="ldir">[${dir.toUpperCase()}]</span><span class="lmsg">${esc(msg)}</span>`;
+  el.appendChild(d);
+  while(el.children.length>3000)el.removeChild(el.firstChild);
+  if(cb('autoScr'))el.scrollTop=el.scrollHeight;
+}
+const txLog =m=>addLog('tx',m);
+const rxLog =m=>addLog('rx',m);
+const sysLog=m=>addLog('sys',m);
+const errLog=m=>addLog('err',m);
+function clearLog(){$('conLog').innerHTML='';}
+function exportLog(){
+  const lines=[];$('conLog').querySelectorAll('.ll').forEach(el=>{
+    const ts=el.querySelector('.lts')?.textContent||'';
+    const d=el.querySelector('.ldir')?.textContent||'';
+    const m=el.querySelector('.lmsg')?.textContent||'';
+    lines.push(`${ts} ${d} ${m}`);
+  });
+  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='gflow_log.txt';a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ════════ NOTIFICATIONS & SOUND ════════
+async function requestNotifPerm(){
+  if(!('Notification' in window)){toast('Notifications not supported','warn');return;}
+  const p=await Notification.requestPermission();
+  toast(p==='granted'?'Notifications enabled!':'Permission denied',p==='granted'?'ok':'warn');
+}
+
+function sendNotification(title,body){
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  try{new Notification(title,{body,icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="20" font-size="20">⚡</text></svg>'});}catch(_){}
+}
+
+function playBeep(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.type='square';osc.frequency.value=880;
+    gain.gain.setValueAtTime(0.1,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+    osc.start();osc.stop(ctx.currentTime+0.4);
+  }catch(_){}
+}
+
+// ════════ WAKE LOCK API ════════
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    if(wakeLock) return; // already held
+    wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{wakeLock=null;updateWakeLockUI();});
+    updateWakeLockUI();
+    sysLog('🔆 Screen wake lock acquired — display will not sleep');
+  }catch(e){
+    // WakeLock denied (e.g. battery saver, backgrounded tab) — not critical
+    wakeLock=null;updateWakeLockUI();
+  }
+}
+
+function releaseWakeLock(){
+  if(!wakeLock) return;
+  try{wakeLock.release();}catch(_){}
+  wakeLock=null;updateWakeLockUI();
+  sysLog('🌙 Screen wake lock released');
+}
+
+function updateWakeLockUI(){
+  const pill=$('wakeLockPill');
+  const lbl=$('wlTxt');
+  if(pill) pill.className='wl-pill'+(wakeLock?' active':'');
+  if(lbl)  lbl.textContent=wakeLock?'AWAKE ON':'AWAKE OFF';
+}
+
+// Re-acquire wake lock when tab becomes visible again mid-stream
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&playing&&!paused&&!wakeLock){
+    requestWakeLock();
+  }
+});
+
+// ════════ TAB NAVIGATION ════════
+function switchTab(name,btn){
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  const pane=$('t-'+name);if(pane)pane.classList.add('active');
+  if(btn)btn.classList.add('active');
+  if(name==='stream')renderCanvas();
+  if(name==='stats'){renderStatsPanel();renderGrblSettings();}
+  if(name==='settings')loadProfileList();
+}
+
+// ════════ UI STATE ════════
+function updateUI(){
+  const con=connected,file=rawLines.length>0,play=playing;
+  dis('btnConn',con);dis('btnDisc',!con);dis('btnRst',!con);dis('btnUnlock',!con);dis('btnHome',!con);
+  dis('btnPlay',!con||!file||play);dis('btnPause',!play);dis('btnStop',!play);
+  dis('btnStep',!con||!file);dis('btnRew',!file);dis('btnResume',!file);
+  if($('btnAir'))dis('btnAir',!file||play); // air draw: needs file, blocked while streaming
+  dis('mInp',!con);dis('btnMS',!con);dis('mInp2',!con);dis('btnMS2',!con);
+
+  // Jog
+  ['jY+','jY-','jX-','jX+','jZ+','jZ-','jHm','btnJogCancel','btnGoHome','btnMachHome','btnPenDown','btnPenUp'].forEach(id=>dis(id,!con));
+
+  // Overrides
+  ['feedOvr','spindleOvr','bFM10','bFM1','bFR','bFP1','bFP10','bRF','bRH','bRQ','bSM10','bSM1','bSR2','bSP1','bSP10'].forEach(id=>dis(id,!con));
+  ['bFH','bCY','bGG','bSS','bZW','bCM'].forEach(id=>dis(id,!con));
+
+  // Status pill
+  let cls='',pulse=false,lbl='DISCONNECTED';
+  if(!con){cls='';pulse=false;lbl='DISCONNECTED';}
+  else if(play&&!paused){cls='streaming';pulse=true;lbl='STREAMING';}
+  else if(paused){cls='paused';pulse=false;lbl='PAUSED';}
+  else{cls='conn';pulse=false;lbl='CONNECTED';}
+  const pill=$('pill');if(pill)pill.className='pill '+cls;
+  const dot=$('sdot');if(dot)dot.className='sdot'+(pulse?' pulse':'');
+  txt('stxt',lbl);
+  $('connPanel')?.classList.toggle('active-p',con);
+  updateModeBadge();
+  if(!play)txt('btnPause','⏸ Pause');
+}
+
+// ════════ TOAST ════════
+function toast(msg,type='info'){
+  const c=$('tc');const el=document.createElement('div');
+  el.className='toast '+(type==='ok'?'ok':type==='err'?'err':type==='warn'?'warn':'');
+  el.textContent=msg;c.appendChild(el);
+  setTimeout(()=>{el.style.animation='tO .3s ease forwards';setTimeout(()=>el.remove(),300);},3200);
+}
+
+// ════════ KEYBOARD ════════
+document.addEventListener('keydown',e=>{
+  const tag=document.activeElement?.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  switch(e.key){
+    case ' ':e.preventDefault();playing?doPause():(connected&&rawLines.length&&doPlay());break;
+    case 'Escape':doStop();break;
+    case 'r':case 'R':doRewind();break;
+    case 's':case 'S':if(e.ctrlKey||e.metaKey){e.preventDefault();doStep();}break;
+    case '?':if(connected)rawBytes(new Uint8Array([0x3F]));break;
+    case '!':if(connected)grblFeedHold();break;
+    case '~':if(connected)grblCycleStart();break;
+    case 'ArrowUp':if(connected)jog('Y',1);break;
+    case 'ArrowDown':if(connected)jog('Y',-1);break;
+    case 'ArrowLeft':if(connected)jog('X',-1);break;
+    case 'ArrowRight':if(connected)jog('X',1);break;
+    case 'PageUp':if(connected)jog('Z',1);break;
+    case 'PageDown':if(connected)jog('Z',-1);break;
+  }
+});
+
+// Click outside modal to close
+$('macroModal')?.addEventListener('click',e=>{if(e.target===$('macroModal'))closeMacroModal();});
+</script>
+</body>
+</html>
+<!-- ██████ PATCH BLOCK — all new features injected here ██████ -->
+<script>
+// ════════════════════════════════════════════════════════
+//  FEATURE PATCH: Simulation · Pre-check · Pen lift · Steps/mm · Bounds · Canvas-resume
+// ════════════════════════════════════════════════════════
+
+// ── New state ──────────────────────────────────────────
+let simMode = false;
+let airDrawMode = false;   // stream with pen forced UP — M3 S{down} → M3 S{up}
+let pendingPlayAfterCheck = false;
+let clickResumeMode = false;
+let cvTransform = null;
+let cvClickMoved = false;
+let resumeHighlightIdx = -1;
+let hasServoCtrl = false;
+
+// ── SIMULATION MODE ────────────────────────────────────
+function toggleSim() {
+  simMode = !simMode;
+  const btn = $('btnSim');
+  if (simMode) {
+    connected = true;
+    gState = 'Idle';
+    updateMachBar();
+    if (btn) { btn.style.color = 'var(--purple)'; btn.style.borderColor = 'rgba(181,123,238,.5)'; }
+    $('simBanner').classList.add('vis');
+    sysLog('🎮 SIMULATION MODE — no hardware needed. rawStr calls are intercepted.');
+    toast('Simulation ON — play any file offline', 'ok');
+  } else {
+    if (!sPort) connected = false;
+    gState = '—';
+    updateMachBar();
+    if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+    $('simBanner').classList.remove('vis');
+    sysLog('Simulation OFF');
+    toast('Simulation OFF');
+  }
+  updateUI();
+}
+
+// ── PEN TEST (MK.1 servo calibration) ─────────────────
+async function penTestDown(){
+  if(!connected&&!simMode)return;
+  const v=num('penDownVal',60);
+  await rawStr(`M3 S${v}`);
+  await rawStr('G4 P300');
+  sysLog(`→ Pen DOWN (M3 S${v}, settle 300ms)`);
+  toast(`Pen Down — S${v}`,'ok');
+}
+async function penTestUp(){
+  if(!connected&&!simMode)return;
+  const v=num('penUpVal',150);
+  await rawStr(`M3 S${v}`);
+  await rawStr('G4 P300');
+  sysLog(`→ Pen UP (M3 S${v}, settle 300ms)`);
+  toast(`Pen Up — S${v}`,'ok');
+}
+
+// ── AIR DRAW MODE ───────────────────────────────────────
+// Streams the full file but every pen-down M3 S{≤thresh} is silently
+// replaced with M3 S{penUpVal} — head traverses the entire job
+// without the pen ever touching paper. Perfect for pre-flight checks.
+function toggleAirDraw() {
+  airDrawMode = !airDrawMode;
+  const btn = $('btnAir');
+  const banner = $('airBanner');
+  if (airDrawMode) {
+    if (btn) { btn.style.color = 'var(--orange)'; btn.style.borderColor = 'rgba(255,107,53,.5)'; }
+    if (banner) banner.classList.add('vis');
+    sysLog(`✈ Air Draw ON — M3 S≤${num('penDownThresh',100)} → M3 S${num('penUpVal',150)}. Pen will not touch paper.`);
+    toast('Air Draw ON — pen forced up', 'warn');
+  } else {
+    if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+    if (banner) banner.classList.remove('vis');
+    sysLog('✈ Air Draw OFF — normal pen commands restored');
+    toast('Air Draw OFF');
+  }
+}
+
+// Intercept rawStr & rawBytes — monkey-patch the originals
+const _origRawStr   = window.rawStr;
+const _origRawBytes = window.rawBytes;
+
+// jobIdx → simulated duration (ms) for the line about to be sent at jobIdx.
+// Built once per file load by precomputeSimTimings(). Falls back to a small
+// constant if the table is missing (e.g. manual-console commands).
+let simTimings = [];
+
+window.rawStr = async function(cmd) {
+  if (simMode) {
+    txLog('[SIM] ' + cmd);
+    simUpdatePos(cmd);
+    const delay = simDelayForCurrentLine();
+    setTimeout(() => handleRx('ok'), delay);
+    return true;
+  }
+  // ── Air Draw: replace pen-down M3 with pen-up S value ────────────────
+  // Matches M3, M03, M003 — any variant GRBL accepts.
+  if (airDrawMode && /M0*3(?!\d)/i.test(cmd)) {
+    const sMatch = cmd.match(/S\s*([\d.]+)/i);
+    const thresh = num('penDownThresh', 100);
+    const sVal   = sMatch ? parseFloat(sMatch[1]) : 0;   // bare M3 = treat as pen-down
+    if (!sMatch || sVal <= thresh) {
+      const penUp = num('penUpVal', 150);
+      const replaced = `M3 S${penUp}`;
+      txLog(`[AIR] ${cmd.trim()} → ${replaced}`);
+      return _origRawStr(replaced);
+    }
+  }
+  return _origRawStr(cmd);
+};
+
+window.rawBytes = async function(b) {
+  if (simMode) return;
+  return _origRawBytes(b);
+};
+
+// Returns the ms delay to use for the *line currently being sent*.
+// jobIdx has not yet been incremented by sendNext()/bufFill() at the point
+// rawStr() is called, so simTimings[jobIdx] corresponds to the line in flight.
+function simDelayForCurrentLine() {
+  const mult = Math.max(1, num('simSpeedMult', 10));
+  const lo = Math.max(0, num('simMinDelay', 2));
+  const hi = Math.max(lo + 1, num('simMaxDelay', 500));
+  let base = simTimings[jobIdx];          // seconds
+  if (base == null) base = 0.03;          // unknown line (e.g. manual command) — ~30ms equivalent
+  let ms = (base * 1000) / mult;
+  return Math.min(hi, Math.max(lo, ms));
+}
+
+// Precompute realistic per-line durations for the whole job using the same
+// distance/feed-rate model as analyzeGcode(), but indexed by jobIdx so the
+// simulator can look up "how long should THIS line take" in O(1).
+function precomputeSimTimings() {
+  simTimings = new Array(lineMap.length).fill(0);
+  let x=0,y=0,z=0,abs=true,feed=1000;
+  const RAPID_FEED = num('sMaxF', 3000) || 3000; // mm/min, profile-derived rapid speed
+
+  for (let ji = 0; ji < lineMap.length; ji++) {
+    const rawIdx = lineMap[ji];
+    const line = stripCmt(rawLines[rawIdx]).toUpperCase().replace(/\s+/g,'');
+    if (!line) { simTimings[ji] = 0; continue; }
+
+    if (/G90(?!\d)/.test(line)) abs = true;
+    if (/G91(?!\d)/.test(line)) abs = false;
+
+    const co = c => { const m = line.match(new RegExp(c+'([-+]?[0-9]*\\.?[0-9]+)')); return m ? parseFloat(m[1]) : null; };
+    const nf = co('F'); if (nf) feed = nf;
+    const nx = co('X'), ny = co('Y'), nz = co('Z');
+
+    const isRapid = /G0{0,2}(?!\d)/.test(line);
+    const isLinear = /G0*1(?!\d)/.test(line);
+    const isArc = /G0*[23](?!\d)/.test(line);
+
+    let dur = 0;
+    if (nx!==null || ny!==null || nz!==null) {
+      const ex=abs?(nx??x):x+(nx??0), ey=abs?(ny??y):y+(ny??0), ez=abs?(nz??z):z+(nz??0);
+      const d = Math.sqrt((ex-x)**2+(ey-y)**2+(ez-z)**2);
+      if (isRapid) dur = d / (RAPID_FEED/60);
+      else if (isLinear || isArc) dur = d / Math.max(1,(feed/60));
+      x=ex; y=ey; z=ez;
+    }
+
+    // Non-motion commands take a small fixed slice so the sim doesn't stall
+    // on long sequences of M-codes / settings, but dwell commands (G4) honor
+    // their actual programmed pause.
+    if (dur === 0) {
+      const g4 = line.match(/G4P([\d.]+)/) || line.match(/G4S([\d.]+)/);
+      if (g4) {
+        const isS = /G4S/.test(line);
+        dur = isS ? parseFloat(g4[1]) : parseFloat(g4[1]) / 1000; // P is ms, S is seconds
+      } else if (/M3|M4|M5/.test(line)) {
+        dur = 0.05; // servo/spindle commands — quick but non-zero
+      } else {
+        dur = 0.01; // generic non-motion line
+      }
+    }
+
+    simTimings[ji] = dur; // seconds
+  }
+  updateSimDurationDisplay();
+}
+
+function updateSimDurationDisplay() {
+  const el = $('eSimDuration');
+  if (!el) return;
+  if (!simTimings.length) { el.textContent = '—'; return; }
+  const totalSec = simTimings.reduce((a,b)=>a+b, 0);
+  const mult = Math.max(1, num('simSpeedMult', 10));
+  const realStr = fmt(Math.round(totalSec));
+  const simStr  = fmt(Math.round(totalSec / mult));
+  el.textContent = `${realStr} → ${simStr} @ ${mult}×`;
+}
+
+function onSimSpeedSlider(v) {
+  txt('eSimMult', v + '×');
+  updateSimDurationDisplay();
+}
+
+// Simulate machine position update in sim mode
+let _simIdle;
+function simUpdatePos(cmd) {
+  const upper = cmd.toUpperCase().replace(/\s+/g,'');
+  const co = c => { const m = upper.match(new RegExp(c+'([-+]?[\\d.]+)')); return m ? parseFloat(m[1]) : null; };
+  const nx = co('X'), ny = co('Y'), nz = co('Z');
+  if (nx !== null) { mPos.x = nx; wPos.x = nx; }
+  if (ny !== null) { mPos.y = ny; wPos.y = ny; }
+  if (nz !== null) { mPos.z = nz; wPos.z = nz; }
+  gState = 'Run'; updateMachBar();
+  clearTimeout(_simIdle);
+  _simIdle = setTimeout(() => { if (simMode) { gState = 'Idle'; updateMachBar(); } }, 250);
+}
+
+// Update updateUI to allow play when simMode
+const _origUpdateUI = window.updateUI;
+window.updateUI = function() {
+  _origUpdateUI();
+  // When simMode, Play/Step/Jog/Manual should work even without serial
+  const file = rawLines.length > 0;
+  if (simMode) {
+    dis('btnPlay',  !file || playing);
+    dis('btnStep',  !file);
+    dis('mInp',     false);
+    dis('btnMS',    false);
+    dis('mInp2',    false);
+    dis('btnMS2',   false);
+    ['jY+','jY-','jX-','jX+','jZ+','jZ-','jHm','btnJogCancel','btnPenDown','btnPenUp'].forEach(id => dis(id, false));
+    if($('btnAir'))dis('btnAir', !file || playing);
+    // Status pill
+    const pill = $('pill');
+    if (pill) pill.className = 'pill sim';
+    const dot = $('sdot'); if (dot) dot.className = 'sdot pulse';
+    txt('stxt', 'SIMULATION');
+  }
+};
+
+// ── G-CODE PRE-CHECK ──────────────────────────────────
+function runPreCheck() {
+  if (!rawLines.length) { toast('No file loaded', 'warn'); return; }
+  const issues = preCheck();
+  showPreCheckModal(issues, false);
+}
+
+function preCheck() {
+  const issues = [];
+  const areaX = num('sAreaX', 200), areaY = num('sAreaY', 200), maxF = num('sMaxF', 3000);
+  if (!lineMap.length) { issues.push({ sev:'error', line:0, msg:'No executable lines found in file' }); return issues; }
+  if (lineMap.length > 100000) issues.push({ sev:'warn', line:0, msg:`Very large file: ${lineMap.length} exec lines — expect slow streaming` });
+
+  let hasFeed = false, feedWarnDone = false;
+  const first5 = lineMap.slice(0, 5).map(i => stripCmt(rawLines[i]).toUpperCase());
+  const hasRef = first5.some(l => /G28|G92|G10/.test(l));
+  if (!hasRef) issues.push({ sev:'warn', line:0, msg:'No home/reference (G28/G92) in first 5 commands — ensure machine is positioned first' });
+
+  for (let ji = 0; ji < lineMap.length; ji++) {
+    const rawIdx = lineMap[ji];
+    const line = stripCmt(rawLines[rawIdx]).toUpperCase().replace(/\s+/g,'');
+    if (!line) continue;
+    const lineNum = rawIdx + 1;
+    const co = c => { const m = line.match(new RegExp(c+'([-+]?[0-9]*\\.?[0-9]+)')); return m ? parseFloat(m[1]) : null; };
+    const nf = co('F');
+    if (nf !== null) {
+      hasFeed = true;
+      if (nf > maxF * 1.5) issues.push({ sev:'warn', line:lineNum, msg:`F${nf} exceeds profile max (${maxF}mm/min)` });
+      if (nf < 5) issues.push({ sev:'warn', line:lineNum, msg:`Very low feed F${nf} — may cause stalls` });
+    }
+    const isMove = /G0*1(?!\d)|G0*[23](?!\d)/.test(line);
+    if (isMove && !hasFeed && !feedWarnDone) {
+      issues.push({ sev:'warn', line:lineNum, msg:'G1/G2/G3 before any feed rate (F) is set' });
+      feedWarnDone = true;
+    }
+    const nx = co('X'), ny = co('Y');
+    if (nx !== null) {
+      if (nx < -0.5) issues.push({ sev:'error', line:lineNum, msg:`X${nx.toFixed(2)} is negative (below origin)` });
+      else if (nx > areaX + 0.5) issues.push({ sev:'error', line:lineNum, msg:`X${nx.toFixed(2)} exceeds work area X (${areaX}mm)` });
+    }
+    if (ny !== null) {
+      if (ny < -0.5) issues.push({ sev:'error', line:lineNum, msg:`Y${ny.toFixed(2)} is negative (below origin)` });
+      else if (ny > areaY + 0.5) issues.push({ sev:'error', line:lineNum, msg:`Y${ny.toFixed(2)} exceeds work area Y (${areaY}mm)` });
+    }
+    if (issues.filter(i => i.sev === 'error').length >= 12) {
+      issues.push({ sev:'info', line:0, msg:'(Further errors truncated — fix these first)' });
+      break;
+    }
+  }
+  return issues;
+}
+
+function showPreCheckModal(issues, fromPlay) {
+  pendingPlayAfterCheck = fromPlay;
+  const errs  = issues.filter(i => i.sev === 'error').length;
+  const warns = issues.filter(i => i.sev === 'warn').length;
+  const sum = $('preCheckSummary');
+  const res = $('preCheckResults');
+  const runBtn = $('pcRunBtn');
+  if (!res) return;
+  if (sum) sum.textContent = issues.length
+    ? `${errs} error${errs !== 1?'s':''} · ${warns} warning${warns !== 1?'s':''}${errs ? ' — fix errors before running' : ''}`
+    : '';
+  if (!issues.length) {
+    res.innerHTML = '<div style="color:var(--green);font-family:JetBrains Mono,monospace;font-size:.78rem;padding:14px 0;text-align:center">✓ No issues found — file looks good!</div>';
+    if (fromPlay) { closePreCheck(); _startPlaying(); return; }
+  } else {
+    const icons = { error:'<span style="color:var(--red)">✕</span>', warn:'<span style="color:var(--yellow)">⚠</span>', info:'<span style="color:var(--cyan)">ℹ</span>' };
+    res.innerHTML = issues.map(i =>
+      `<div style="display:flex;gap:8px;padding:6px 2px;border-bottom:1px solid var(--border);font-family:JetBrains Mono,monospace;font-size:.7rem">
+        ${icons[i.sev]||''}
+        <span style="color:var(--muted);min-width:46px;flex-shrink:0">${i.line ? 'L' + i.line : ''}</span>
+        <span style="color:var(--text)">${esc(i.msg)}</span>
+      </div>`
+    ).join('');
+  }
+  if (runBtn) runBtn.textContent = errs ? '▶ Run Anyway' : '▶ Run';
+  $('preCheckModal').style.display = 'flex';
+}
+
+function closePreCheck() { $('preCheckModal').style.display = 'none'; pendingPlayAfterCheck = false; }
+function confirmRunAfterCheck() { closePreCheck(); _startPlaying(); }
+
+// Wrap doPlay with pre-check
+const _origDoPlay = window.doPlay;
+window.doPlay = function() {
+  if (!connected && !simMode) { toast('Connect first (or enable SIM)', 'warn'); return; }
+  if (!rawLines.length) { toast('No file loaded', 'warn'); return; }
+  if (playing) return;
+  const issues = preCheck();
+  if (issues.length) { showPreCheckModal(issues, true); return; }
+  _startPlaying();
+};
+
+function _startPlaying() {
+  playing = true; paused = false;
+  sSent = 0; sOk = 0; sErr = 0;
+  txt('eSent','0'); txt('eOk','0'); txt('eErr','0');
+  tStart = Date.now(); elapInt = setInterval(tickElap, 500);
+  $('pF').classList.remove('idle');
+  updateUI();
+  if (typeof requestWakeLock === 'function') requestWakeLock();
+  if (streamMode === 'buffer') { bufReset(); bufFill(); } else { scheduleNext(); }
+}
+
+// ── STEPS/MM — extend updateMachBar ───────────────────
+const _origUpdateMachBar = window.updateMachBar;
+window.updateMachBar = function() {
+  _origUpdateMachBar();
+  const sx = grblSettingsMap['100']?.val;
+  const sy = grblSettingsMap['101']?.val;
+  const sz = grblSettingsMap['102']?.val;
+  txt('eStepsX', sx || '—');
+  txt('eStepsY', sy || '—');
+  txt('eStepsZ', sz || '—');
+};
+
+// ── SERVO PEN LIFT — replace parseTP ──────────────────
+window.parseTP = function(lines) {
+  const segs = [];
+  let x=0,y=0,z=0,abs=true,lastT='rapid';
+  let penDown = false;  // servo/pen state
+  let anyServo = false;
+
+  for (let li = 0; li < lines.length; li++) {
+    const raw = lines[li];
+    const line = raw.replace(/;.*$/,'').replace(/\(.*?\)/g,'').toUpperCase().replace(/\s+/g,'');
+    if (!line) continue;
+
+    if (/G90(?!\d)/.test(line)) abs = true;
+    if (/G91(?!\d)/.test(line)) abs = false;
+
+    // ── Pen/servo state from M3 S{val} and M5 ──────
+    if (/M3(?!\d)/.test(line)) {
+      anyServo = true;
+      const sm = line.match(/S([\d.]+)/);
+      const sval = sm ? parseFloat(sm[1]) : 9999;
+      const thresh = num('penDownThresh', 100);
+      penDown = sval <= thresh;
+    }
+    if (/M5(?!\d)/.test(line)) { anyServo = true; penDown = false; }
+
+    const co = c => { const m = line.match(new RegExp(c+'([-+]?[0-9]*\\.?[0-9]+)')); return m ? parseFloat(m[1]) : null; };
+    const nx=co('X'),ny=co('Y'),nz=co('Z');
+    const ni=co('I'),nj=co('J'),nr=co('R');
+
+    const isG0=/G0{0,2}(?!\d)/.test(line);
+    const isG1=/G0*1(?!\d)/.test(line);
+    const isG2=/G0*2(?!\d)/.test(line);
+    const isG3=/G0*3(?!\d)/.test(line);
+    let mt = null;
+    if (isG0) mt='rapid'; else if (isG1) mt='linear';
+    else if (isG2) mt='arc_cw'; else if (isG3) mt='arc_ccw';
+    else mt = lastT;
+    if ((mt==='arc_cw'||mt==='arc_ccw') && !isG2 && !isG3) mt='linear';
+
+    const ex = abs?(nx??x):x+(nx??0);
+    const ey = abs?(ny??y):y+(ny??0);
+    const ez = abs?(nz??z):z+(nz??0);
+
+    const addSeg = seg => segs.push({ ...seg, pen: penDown, lineIdx: li });
+
+    if (mt==='arc_cw'||mt==='arc_ccw') {
+      const ccw = (mt==='arc_ccw');
+      if (ni!==null||nj!==null) {
+        const icx=x+(ni??0), icy=y+(nj??0);
+        const r=Math.sqrt((x-icx)**2+(y-icy)**2);
+        if (r>1e-6) {
+          const sa=Math.atan2(y-icy,x-icx), ea=Math.atan2(ey-icy,ex-icx);
+          const fullCircle=Math.abs(ex-x)<1e-4&&Math.abs(ey-y)<1e-4&&r>1e-4;
+          addSeg({t:'arc',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez,cx:icx,cy:icy,r,sa,ea,ccw,fullCircle});
+        }
+      } else if (nr!==null) {
+        const R=Math.abs(nr), dx=ex-x, dy=ey-y, d=Math.sqrt(dx*dx+dy*dy);
+        if (d>1e-6&&d<=2*R+1e-6) {
+          const mx2=(x+ex)/2, my2=(y+ey)/2;
+          const h=Math.sqrt(Math.max(0,R*R-(d/2)**2));
+          const px=-dy/d, py=dx/d;
+          const sign=(ccw!==(nr<0))?1:-1;
+          const icx=mx2+sign*h*px, icy=my2+sign*h*py;
+          const sa=Math.atan2(y-icy,x-icx), ea=Math.atan2(ey-icy,ex-icx);
+          addSeg({t:'arc',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez,cx:icx,cy:icy,r:R,sa,ea,ccw,fullCircle:false});
+        } else if (ex!==x||ey!==y||ez!==z) {
+          addSeg({t:'linear',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez});
+        }
+      } else if (ex!==x||ey!==y||ez!==z) {
+        addSeg({t:'linear',x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez});
+      }
+    } else if (ex!==x||ey!==y||ez!==z) {
+      addSeg({t:mt,x1:x,y1:y,z1:z,x2:ex,y2:ey,z2:ez});
+    }
+    x=ex; y=ey; z=ez;
+    if (isG0) lastT='rapid'; else if (isG1) lastT='linear';
+    else if (isG2||isG3) lastT=mt;
+  }
+
+  hasServoCtrl = anyServo;
+  // Show/hide pen legend
+  const leg = $('penLegend');
+  if (leg) leg.style.display = anyServo ? 'flex' : 'none';
+  if (anyServo) {
+    txt('eServoInfo', `M3 S≤${num('penDownThresh',100)}=draw · M5/S>thresh=travel`);
+  }
+  return segs;
+};
+
+// ── BOUNDING BOX INFO BAR ─────────────────────────────
+function updateBoundsBar() {
+  const bar = $('boundsBar');
+  if (!bar || !tpB) { if (bar) bar.style.display = 'none'; return; }
+  const areaX = num('sAreaX', 200), areaY = num('sAreaY', 200);
+  const fileW = tpB.mxX - tpB.mnX, fileH = tpB.mxY - tpB.mnY;
+  const fits = tpB.mxX <= areaX+0.2 && tpB.mnX >= -0.2 && tpB.mxY <= areaY+0.2 && tpB.mnY >= -0.2;
+  bar.style.display = '';
+  bar.className = 'bounds-bar ' + (fits ? 'ok' : 'warn');
+  const statusHtml = fits
+    ? `<span class="bounds-ok">✓ Fits within ${areaX}×${areaY}mm</span>`
+    : `<span class="bounds-warn">⚠ Exceeds machine area (${areaX}×${areaY}mm)</span>`;
+  $('eBoundsText').innerHTML =
+    `<span style="color:var(--muted)">File:</span> `+
+    `<span class="bounds-info">${fileW.toFixed(1)}×${fileH.toFixed(1)}mm</span> `+
+    `<span style="color:var(--muted)">origin (${tpB.mnX.toFixed(1)},${tpB.mnY.toFixed(1)})</span> `+
+    `<span style="color:var(--muted)">·</span> ${statusHtml}`;
+  if (!fits) showAlert(`File bounds ${fileW.toFixed(1)}×${fileH.toFixed(1)}mm may exceed work area ${areaX}×${areaY}mm`, 'warn');
+}
+
+// Hook into processFile to call updateBoundsBar + precompute sim timings
+const _origProcessFile = window.processFile;
+window.processFile = function(text, name, size) {
+  _origProcessFile(text, name, size);
+  updateBoundsBar();
+  precomputeSimTimings();
+};
+
+const _origClearFile = window.clearFile;
+window.clearFile = function() {
+  _origClearFile();
+  const bar = $('boundsBar'); if (bar) bar.style.display = 'none';
+  resumeHighlightIdx = -1;
+  simTimings = [];
+  updateSimDurationDisplay();
+};
+
+// ── CANVAS CLICK-TO-RESUME ────────────────────────────
+function toggleClickResume() {
+  clickResumeMode = !clickResumeMode;
+  const cv = $('cvs'), wrap = $('cvWrap'), btn = $('btnClickResume');
+  if (clickResumeMode) {
+    if (cv)   cv.style.cursor = 'crosshair';
+    if (wrap) wrap.classList.add('cr-active');
+    if (btn)  { btn.style.color = 'var(--yellow)'; btn.style.borderColor = 'rgba(255,214,0,.5)'; }
+    toast('📍 Click any point on the toolpath to set resume', 'info');
+  } else {
+    if (cv)   cv.style.cursor = 'grab';
+    if (wrap) wrap.classList.remove('cr-active');
+    if (btn)  { btn.style.color = ''; btn.style.borderColor = ''; }
+    resumeHighlightIdx = -1;
+    renderCanvas();
+  }
+}
+
+function screenToWorld(sx, sy) {
+  if (!cvTransform) return null;
+  const { cx, cy, sc, midX, midY } = cvTransform;
+  return { x: (sx - cx) / sc + midX, y: -(sy - cy) / sc + midY };
+}
+
+function findNearestSegment(wx, wy) {
+  let minD = Infinity, minI = -1;
+  for (let i = 0; i < tp.length; i++) {
+    const s = tp[i];
+    const pts = [
+      { x: s.x1, y: s.y1 },
+      { x: s.x2, y: s.y2 },
+      { x: (s.x1+s.x2)/2, y: (s.y1+s.y2)/2 }
+    ];
+    for (const p of pts) {
+      const d = Math.hypot(p.x - wx, p.y - wy);
+      if (d < minD) { minD = d; minI = i; }
+    }
+  }
+  return { idx: minI, dist: minD };
+}
+
+function handleCanvasResumeClick(e) {
+  if (!tp.length || !cvTransform) return;
+  const rect = e.target.getBoundingClientRect();
+  const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  if (!world) return;
+  const { idx } = findNearestSegment(world.x, world.y);
+  if (idx < 0) return;
+  resumeHighlightIdx = idx;
+
+  // Map tp segment back to job index via stored lineIdx
+  let jobPos = -1;
+  if (tp[idx].lineIdx !== undefined) {
+    jobPos = lmIdx.get(tp[idx].lineIdx) ?? -1;
+  }
+  if (jobPos < 0) jobPos = Math.floor((idx / tp.length) * lineMap.length);
+  if (jobPos < 0) jobPos = 0;
+  jobIdx = jobPos;
+  donePct = idx / Math.max(tp.length, 1);
+  updateCodeLines(); updateProg(); renderCanvas();
+  const s = tp[idx];
+  toast(`📍 Resume → seg ${idx+1}/${tp.length} · line ${lineMap[jobPos]+1} · X${s.x1.toFixed(2)} Y${s.y1.toFixed(2)}`, 'ok');
+  sysLog(`Resume point: seg ${idx+1} → raw line ${lineMap[jobPos]+1} (X${s.x1.toFixed(2)} Y${s.y1.toFixed(2)})`);
+}
+
+// ── PATCH renderCanvas for: pen colours · resume highlight · cvTransform ──
+const _origRenderCanvas = window.renderCanvas;
+window.renderCanvas = function() {
+  const cv = $('cvs'); if (!cv) return;
+  _origRenderCanvas();   // draw everything as before
+
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  if (!tp.length || !tpB) return;
+
+  // Re-compute transform so we can position overlays accurately
+  const b = tpB;
+  const pad = 28;
+  const rX = (b.mxX-b.mnX)||1, rY = (b.mxY-b.mnY)||1;
+  const fitSc = Math.min((W-pad*2)/rX, (H-pad*2)/rY);
+  const sc = fitSc * cvSc;
+  const midX = (b.mnX+b.mxX)/2, midY = (b.mnY+b.mxY)/2;
+  const cx = W/2 + cvPan.x, cy = H/2 + cvPan.y;
+  cvTransform = { cx, cy, sc, midX, midY };
+
+  const toC2D = (wx,wy) => ({ x: cx+(wx-midX)*sc, y: cy-(wy-midY)*sc });
+  const toIso = (wx,wy,wz) => {
+    const ix=(wx-midX)*sc,iy=(wy-midY)*sc,iz=(wz-(b.mnZ+b.mxZ)/2)*sc;
+    const a=Math.PI/6;
+    return { x: cx+(ix-iy)*Math.cos(a), y: cy-(ix+iy)*Math.sin(a)+iz*0.8 };
+  };
+  const toC = view3D ? (wx,wy,wz) => toIso(wx,wy,wz??0) : (wx,wy) => toC2D(wx,wy);
+
+  // ── Re-draw linear/arc segments with pen-aware colours (overlays existing) ──
+  if (hasServoCtrl) {
+    const doneN = Math.floor(donePct * tp.length);
+    for (let i = 0; i < tp.length; i++) {
+      const s = tp[i];
+      const done = i < doneN, isCur = i === doneN;
+      if (s.t === 'rapid') continue; // rapids already drawn correctly
+
+      ctx.beginPath();
+      if (s.t === 'arc') {
+        const ac = toC2D(s.cx, s.cy);
+        const cr = s.r * sc;
+        if (s.fullCircle || cr < 0.5) ctx.arc(ac.x, ac.y, Math.max(cr,0.5), 0, Math.PI*2);
+        else ctx.arc(ac.x, ac.y, cr, -s.sa, -s.ea, !s.ccw);
+      } else {
+        const p1 = toC(s.x1,s.y1,s.z1), p2 = toC(s.x2,s.y2,s.z2);
+        ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
+      }
+
+      if (s.pen) {
+        // Pen DOWN → solid bright line (actual drawing)
+        ctx.strokeStyle = done ? 'rgba(0,229,255,0.12)' : (isCur ? '#ffffff' : 'rgba(0,229,255,0.92)');
+        ctx.setLineDash([]); ctx.lineWidth = isCur ? 2.5 : 1.5;
+      } else {
+        // Pen UP → dashed dim grey (travel move, not drawing)
+        ctx.strokeStyle = done ? 'rgba(80,110,140,0.05)' : 'rgba(80,120,160,0.28)';
+        ctx.setLineDash([2, 6]); ctx.lineWidth = 0.7;
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  // ── Resume highlight dot ──────────────────────────────
+  if (resumeHighlightIdx >= 0 && resumeHighlightIdx < tp.length) {
+    const rs = tp[resumeHighlightIdx];
+    const rp = toC(rs.x1, rs.y1, rs.z1 || 0);
+    ctx.strokeStyle = 'rgba(255,214,0,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, 10, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,214,0,0.18)'; ctx.fill();
+    // Arrow label
+    ctx.fillStyle = 'rgba(255,214,0,0.85)';
+    ctx.font = 'bold 9px JetBrains Mono,monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(`► ${resumeHighlightIdx+1}`, rp.x + 13, rp.y);
+  }
+};
+
+// ── PATCH initCanvas to add click-resume handler ──────
+const _origInitCanvas = window.initCanvas;
+window.initCanvas = function() {
+  _origInitCanvas();
+  const cv = $('cvs'); if (!cv) return;
+
+  // Track whether mousedown→mouseup moved significantly (drag vs click)
+  cv.addEventListener('mousedown', () => { cvClickMoved = false; });
+  cv.addEventListener('mousemove', e => {
+    if (e.buttons) cvClickMoved = true;
+  });
+  cv.addEventListener('click', e => {
+    if (cvClickMoved) { cvClickMoved = false; return; }
+    if (clickResumeMode && tp.length) handleCanvasResumeClick(e);
+  });
+};
+
+// ── HTML INJECTION for new UI elements ────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+  // SIM button into connection bar
+  const cbar = document.querySelector('.cbar');
+  if (cbar) {
+    const simBtn = document.createElement('button');
+    simBtn.id = 'btnSim'; simBtn.className = 'btn bghost bsm';
+    simBtn.title = 'Simulation mode — test G-code offline without hardware';
+    simBtn.textContent = '🎮 SIM';
+    simBtn.onclick = toggleSim;
+    const portSpan = $('ePI');
+    cbar.insertBefore(simBtn, portSpan);
+  }
+
+  // SIM banner below connection bar
+  const alertEl = $('alertBanner');
+  if (alertEl) {
+    const banner = document.createElement('div');
+    banner.id = 'simBanner'; banner.className = 'sim-banner';
+    banner.textContent = '🎮 SIMULATION MODE — commands are logged only, not sent to hardware. Click 🎮 SIM to exit.';
+    alertEl.parentNode.insertBefore(banner, alertEl);
+
+    // Air Draw banner — same anchor point, stacks above alertBanner
+    const airBanner = document.createElement('div');
+    airBanner.id = 'airBanner'; airBanner.className = 'air-banner';
+    airBanner.textContent = '✈ AIR DRAW MODE — every pen-down M3 S command is replaced with pen-up. Pen will not touch paper. Click ✈ Air to exit.';
+    alertEl.parentNode.insertBefore(airBanner, alertEl);
+  }
+
+  // Bounds bar above the tab panes
+  const streamPane = $('t-stream');
+  if (streamPane) {
+    const bar = document.createElement('div');
+    bar.id = 'boundsBar'; bar.className = 'bounds-bar'; bar.style.display = 'none';
+    bar.innerHTML = '<span>📐</span><span id="eBoundsText">—</span>';
+    streamPane.parentNode.insertBefore(bar, streamPane);
+  }
+
+  // Steps/mm block in machine bar
+  const mbar = document.querySelector('.mbar');
+  if (mbar) {
+    const sep = document.createElement('div'); sep.className = 'msp';
+    const block = document.createElement('div'); block.className = 'ms';
+    block.innerHTML =
+      '<span class="ml">STEPS/MM</span>' +
+      '<div class="mvc">' +
+        '<span class="mcc"><span class="ax">X </span><span id="eStepsX" style="color:var(--orange);font-size:.76rem">—</span></span>' +
+        '<span class="mcc"><span class="ax">Y </span><span id="eStepsY" style="color:var(--orange);font-size:.76rem">—</span></span>' +
+        '<span class="mcc"><span class="ax">Z </span><span id="eStepsZ" style="color:var(--orange);font-size:.76rem">—</span></span>' +
+      '</div>';
+    mbar.appendChild(sep); mbar.appendChild(block);
+  }
+
+  // Pre-check button next to Play
+  const btnPlay = $('btnPlay');
+  if (btnPlay && btnPlay.parentNode) {
+    const chk = document.createElement('button');
+    chk.id = 'btnCheck'; chk.className = 'btn bghost bsm';
+    chk.title = 'Validate G-code before streaming';
+    chk.textContent = '🔍 Check';
+    chk.onclick = runPreCheck;
+    btnPlay.parentNode.appendChild(chk);
+
+    // Air Draw button — live pen-up intercept
+    const airBtn = document.createElement('button');
+    airBtn.id = 'btnAir'; airBtn.className = 'btn bghost bsm';
+    airBtn.title = 'Air Draw — stream with pen forced UP (motion test, no ink). Toggle before pressing Play.';
+    airBtn.textContent = '✈ Air';
+    airBtn.onclick = toggleAirDraw;
+    btnPlay.parentNode.appendChild(airBtn);
+  }
+
+  // 📍 Click Resume button in canvas panel header
+  const eCvI = $('eCvI');
+  if (eCvI && eCvI.parentNode) {
+    const crBtn = document.createElement('button');
+    crBtn.id = 'btnClickResume'; crBtn.className = 'btn bghost bxs';
+    crBtn.title = 'Click toolpath to set resume point';
+    crBtn.textContent = '📍 Resume';
+    crBtn.onclick = toggleClickResume;
+    eCvI.parentNode.insertBefore(crBtn, eCvI);
+  }
+
+  // Pen legend below canvas header
+  const cvWrap = $('cvWrap');
+  if (cvWrap) {
+    const leg = document.createElement('div');
+    leg.id = 'penLegend'; leg.className = 'pen-legend';
+    leg.style.cssText = 'padding:3px 12px;display:none;font-family:JetBrains Mono,monospace;font-size:.62rem;color:var(--muted);gap:10px;align-items:center';
+    leg.innerHTML =
+      '<div style="width:18px;height:2px;background:var(--cyan);border-radius:1px;flex-shrink:0"></div><span>Pen down (draw)</span>' +
+      '<div style="width:18px;border-top:2px dashed rgba(100,140,170,.5);flex-shrink:0"></div><span>Pen up (travel)</span>' +
+      '<span id="eServoInfo" style="color:var(--orange)"></span>';
+    cvWrap.parentNode.insertBefore(leg, cvWrap);
+  }
+
+  // Pre-check modal
+  const tc = $('tc');
+  if (tc) {
+    const modal = document.createElement('div');
+    modal.id = 'preCheckModal'; modal.className = 'modal-overlay'; modal.style.display = 'none';
+    modal.onclick = e => { if (e.target === modal) closePreCheck(); };
+    modal.innerHTML = `
+      <div class="modal" style="max-width:520px;width:94%">
+        <h3>🔍 G-code Pre-check</h3>
+        <div id="preCheckSummary" style="font-family:JetBrains Mono,monospace;font-size:.72rem;color:var(--muted);margin-bottom:10px"></div>
+        <div id="preCheckResults" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:7px;padding:6px 10px;margin-bottom:16px"></div>
+        <div class="row" style="gap:8px">
+          <button class="btn bgreen" id="pcRunBtn" onclick="confirmRunAfterCheck()">▶ Run</button>
+          <button class="btn bghost" onclick="closePreCheck()">Close</button>
+        </div>
+      </div>`;
+    tc.parentNode.insertBefore(modal, tc);
+  }
+
+  // Plotter settings section in SETTINGS tab
+  const settingsPane = $('t-settings');
+  if (settingsPane) {
+    const div = document.createElement('div');
+    div.style.marginTop = '0';
+    div.innerHTML = `
+    <div class="g2" style="margin-top:0">
+      <div class="panel"><div class="pt g"></div>
+        <div class="phdr">// plotter servo / pen lift (MK.1)</div>
+        <div class="pbody">
+          <div class="set-row">
+            <div><div class="set-lbl">Pen-Down S threshold</div><div class="set-sub">M3 S≤this = pen touching paper (MK.1 default: S60)</div></div>
+            <div class="row"><input type="number" id="penDownThresh" value="100" min="0" max="1000" class="isml" style="width:80px"><span class="ul">S value</span></div>
+          </div>
+          <div class="set-row">
+            <div><div class="set-lbl">Pen Up command</div><div class="set-sub">MK.1: M03 S150</div></div>
+            <div class="row"><input type="number" id="penUpVal" value="150" min="0" max="1000" class="isml" style="width:80px"><span class="ul">S value</span></div>
+          </div>
+          <div class="set-row">
+            <div><div class="set-lbl">Pen Down command</div><div class="set-sub">MK.1: M03 S60</div></div>
+            <div class="row"><input type="number" id="penDownVal" value="60" min="0" max="1000" class="isml" style="width:80px"><span class="ul">S value</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel"><div class="pt p"></div>
+        <div class="phdr">// simulation settings</div>
+        <div class="pbody">
+          <div class="set-row">
+            <div><div class="set-lbl">Sim speed multiplier</div><div class="set-sub">Realistic timing from move distance ÷ feed rate, then × this multiplier. 1× = real time, 10× = ten times faster.</div></div>
+            <div class="row" style="gap:8px">
+              <input type="range" id="simSpeedMult" min="1" max="200" value="10" step="1" style="width:120px" oninput="onSimSpeedSlider(this.value)">
+              <span class="slider-val" id="eSimMult" style="min-width:46px">10×</span>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><div class="set-lbl">Estimated sim duration</div><div class="set-sub">Real job time ÷ multiplier, computed from loaded file</div></div>
+            <span style="font-family:JetBrains Mono,monospace;font-size:.78rem;color:var(--cyan)" id="eSimDuration">—</span>
+          </div>
+          <div class="set-row">
+            <div><div class="set-lbl">Min / Max per-line delay</div><div class="set-sub">Clamps so dense/sparse files stay responsive</div></div>
+            <div class="row" style="gap:6px">
+              <input type="number" id="simMinDelay" value="2" min="0" max="1000" class="isml" style="width:60px"><span class="ul">–</span>
+              <input type="number" id="simMaxDelay" value="500" min="1" max="5000" class="isml" style="width:65px"><span class="ul">ms</span>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><div class="set-lbl">Sim position update</div></div>
+            <label class="ck"><input type="checkbox" id="simPosCb" checked> Update MPos/WPos</label>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    settingsPane.appendChild(div);
+  }
+
+  // Add CSS for new features
+  const style = document.createElement('style');
+  style.textContent = `
+    .bounds-bar{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 14px;margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:.69rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .bounds-bar.ok{border-color:rgba(57,255,20,.3)}.bounds-bar.warn{border-color:rgba(255,45,85,.35)}
+    .bounds-ok{color:var(--green)}.bounds-warn{color:var(--red)}.bounds-info{color:var(--cyan)}
+    .sim-banner{background:rgba(181,123,238,.08);border:1px solid rgba(181,123,238,.3);border-left:3px solid var(--purple);border-radius:8px;padding:6px 14px;font-family:JetBrains Mono,monospace;font-size:.68rem;color:var(--purple);display:none;margin-bottom:8px}
+    .sim-banner.vis{display:block}
+    .air-banner{background:rgba(255,107,53,.07);border:1px solid rgba(255,107,53,.3);border-left:3px solid var(--orange);border-radius:8px;padding:6px 14px;font-family:JetBrains Mono,monospace;font-size:.68rem;color:var(--orange);display:none;margin-bottom:8px}
+    .air-banner.vis{display:block}
+    .pill.sim{color:var(--purple);border-color:rgba(181,123,238,.45);box-shadow:0 0 18px rgba(181,123,238,.2)}
+    .cvwrap.cr-active{cursor:crosshair!important}
+  `;
+  document.head.appendChild(style);
+
+  // Re-run initCanvas to add click handler
+  if (typeof initCanvas === 'function') {
+    const cv = $('cvs');
+    if (cv) {
+      cv.addEventListener('mousedown', () => { cvClickMoved = false; });
+      cv.addEventListener('mousemove', e => { if (e.buttons) cvClickMoved = true; });
+      cv.addEventListener('click', e => {
+        if (cvClickMoved) { cvClickMoved = false; return; }
+        if (clickResumeMode && tp.length) handleCanvasResumeClick(e);
+      });
+    }
+  }
+
+}, false);
+
+</script>
